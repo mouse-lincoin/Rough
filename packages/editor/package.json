@@ -25,6 +25,7 @@
     "roughjs": "^4.6.6"
   },
   "devDependencies": {
+    "@rough/wireframe-kit": "workspace:*",
     "vitest": "^2.1.8"
   }
 }

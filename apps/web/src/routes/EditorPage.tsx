@@ -7,6 +7,7 @@ import { Toolbar } from '../components/Toolbar/Toolbar';
 import { LayerPanel } from '../components/LayerPanel/LayerPanel';
 import { PropertiesPanel } from '../components/PropertiesPanel/PropertiesPanel';
 import { PagesPanel } from '../components/PagesPanel/PagesPanel';
+import { ComponentsPanel } from '../components/ComponentsPanel/ComponentsPanel';
 import { useEditorStore } from '../stores/editorStore';
 
 export function EditorPage(): JSX.Element {
@@ -100,6 +101,7 @@ export function EditorPage(): JSX.Element {
         {panelsVisible && (
           <aside className="editor-sidebar editor-sidebar-left">
             <PagesPanel editorRef={editorRef} />
+            <ComponentsPanel editorRef={editorRef} />
             <LayerPanel editorRef={editorRef} />
           </aside>
         )}

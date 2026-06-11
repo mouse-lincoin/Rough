@@ -31,7 +31,12 @@ export class SelectTool implements Tool {
 
   constructor(
     private ctx: EditorContext,
-    private host?: EditorHost & { getGridSnap?: () => boolean; setSnapGuides?: (guides: import('../../interactions/snapping.js').SnapGuide[]) => void },
+    private host?: EditorHost & {
+      getGridSnap?: () => boolean;
+      setSnapGuides?: (guides: import('../../interactions/snapping.js').SnapGuide[]) => void;
+      enterDeepSelection?: (instanceId: import('@rough/schema').ID) => void;
+      getDeepInstanceId?: () => import('@rough/schema').ID | null;
+    },
   ) {}
 
   getMarqueeRect(): Rect | null {
@@ -39,8 +44,28 @@ export class SelectTool implements Tool {
   }
 
   onDoubleClick(e: NormalizedPointerEvent): void {
-    const hit = hitTestPoint(this.ctx.sceneGraph, e.world, this.ctx.viewport.zoom);
-    if (hit?.element.type === 'text') {
+    const hit = hitTestPoint(
+      this.ctx.sceneGraph,
+      e.world,
+      this.ctx.viewport.zoom,
+      this.host?.getDeepInstanceId?.() ?? null,
+    );
+    if (!hit) return;
+
+    if (hit.element.type === 'instance' && !this.host?.getDeepInstanceId?.()) {
+      this.host?.enterDeepSelection?.(hit.element.id);
+      return;
+    }
+
+    if (hit.isShadow && hit.shadowMeta) {
+      this.ctx.selection.select([hit.element.id]);
+      if (hit.element.type === 'text') {
+        this.ctx.startTextEditing(hit.element);
+      }
+      return;
+    }
+
+    if (hit.element.type === 'text') {
       this.ctx.selection.select([hit.element.id]);
       this.ctx.startTextEditing(hit.element);
     }
@@ -72,7 +97,28 @@ export class SelectTool implements Tool {
       }
     }
 
-    const hit = hitTestPoint(this.ctx.sceneGraph, e.world, this.ctx.viewport.zoom);
+    const hit = hitTestPoint(
+      this.ctx.sceneGraph,
+      e.world,
+      this.ctx.viewport.zoom,
+      this.host?.getDeepInstanceId?.() ?? null,
+    );
+    if (hit?.element.type === 'instance' && !this.host?.getDeepInstanceId?.()) {
+      if (e.shiftKey) {
+        this.ctx.selection.toggle(hit.element.id);
+      } else if (!this.ctx.selection.isSelected(hit.element.id)) {
+        this.ctx.selection.select([hit.element.id]);
+      }
+      this.mode = 'move';
+      this.beforeSnapshots = this.ctx.selection
+        .getIds()
+        .map((id) => this.ctx.document.getElement(id))
+        .filter((el): el is Element => el !== undefined)
+        .map((el) => structuredClone(el));
+      this.dragStartWorld = { ...e.world };
+      return;
+    }
+
     if (hit) {
       if (e.shiftKey) {
         this.ctx.selection.toggle(hit.element.id);

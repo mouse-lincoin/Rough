@@ -264,17 +264,29 @@ export class InputPipeline {
       return;
     }
 
-    // Phase 4+ stubs
     if (mod && e.altKey && e.key === 'k') {
       e.preventDefault();
-      console.info('创建组件 (Phase 4)');
+      this.editor.createComponent();
       return;
     }
 
     if (e.shiftKey && e.key === 'A') {
       e.preventDefault();
-      console.info('Auto Layout (Phase 4)');
+      this.editor.applyAutoLayout();
       return;
+    }
+
+    if (e.key === 'Escape') {
+      if (this.editor.getDeepInstanceId()) {
+        e.preventDefault();
+        this.editor.exitDeepSelection();
+        return;
+      }
+      if (this.editor.getEditingComponentId()) {
+        e.preventDefault();
+        this.editor.exitMasterEdit();
+        return;
+      }
     }
 
     if (mod && e.key === 'e') {

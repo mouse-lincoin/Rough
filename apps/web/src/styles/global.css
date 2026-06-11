@@ -539,3 +539,48 @@ body,
   gap: 4px;
   margin-top: 4px;
 }
+
+.components-panel {
+  flex-shrink: 0;
+  max-height: 220px;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.components-search {
+  padding: 6px 8px;
+}
+
+.components-scroll {
+  overflow: auto;
+  flex: 1;
+}
+
+.components-section {
+  padding: 4px 8px 8px;
+}
+
+.components-list {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.components-item {
+  padding: 4px 8px;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.components-item:hover {
+  border-color: #6965db;
+  color: #6965db;
+}
+
+.prop-field-full {
+  width: 100%;
+  margin-bottom: 6px;
+}

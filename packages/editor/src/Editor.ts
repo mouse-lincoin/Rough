@@ -1,6 +1,6 @@
 import type { DocumentStore } from '@rough/document';
 import { storeAssetBlob } from '@rough/document';
-import type { Element, ID, Page, Stroke, FillStyle } from '@rough/schema';
+import type { ComponentDef, Element, ID, Page, Stroke, FillStyle, OverridableProps } from '@rough/schema';
 import { AddElementCommand, UpdateElementsCommand } from './commands/ElementCommands.js';
 import { createImage } from './document/elementFactory.js';
 import { SceneGraph } from './scene/SceneGraph.js';
@@ -33,6 +33,15 @@ import {
   ungroupSelection,
 } from './EditorActions.js';
 import type { AlignType } from './interactions/align.js';
+import {
+  ApplyAutoLayoutCommand,
+  CreateComponentCommand,
+  DetachInstanceCommand,
+  InstantiateComponentCommand,
+  UpdateComponentCommand,
+  UpdateInstanceOverrideCommand,
+} from './commands/componentCommands.js';
+import { parseShadowId } from './components/instanceExpansion.js';
 
 export interface EditorOptions {
   container: HTMLElement;
@@ -71,6 +80,8 @@ export class Editor implements EditorHost {
   private mainCanvas: HTMLCanvasElement;
   private overlayCanvas: HTMLCanvasElement;
   private copiedStyle: { fills: FillStyle[]; strokes: Stroke[]; roughness: number } | null = null;
+  private deepInstanceId: ID | null = null;
+  private editingComponentId: ID | null = null;
 
   constructor(options: EditorOptions) {
     this.callbacks = options.callbacks ?? {};
@@ -98,13 +109,13 @@ export class Editor implements EditorHost {
     });
 
     this.document.subscribe(() => {
-      this.sceneGraph.rebuild(this.document.getElements());
+      this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
       refreshBoundArrows(this.ctx);
       this.markSceneDirty();
       this.callbacks.onDocumentChange?.();
     });
 
-    this.sceneGraph.rebuild(this.document.getElements());
+    this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
     this.setupCanvases(options);
     this.input = new InputPipeline(
       options.container,
@@ -296,7 +307,7 @@ export class Editor implements EditorHost {
       this.height,
       (id) => this.callbacks.onPageChange?.(id),
     );
-    this.sceneGraph.rebuild(this.document.getElements());
+    this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
     this.markSceneDirty();
     this.callbacks.onDocumentChange?.();
   }
@@ -309,7 +320,7 @@ export class Editor implements EditorHost {
 
   removePage(pageId: ID): void {
     this.document.removePage(pageId);
-    this.sceneGraph.rebuild(this.document.getElements());
+    this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
     this.callbacks.onDocumentChange?.();
   }
 
@@ -324,13 +335,140 @@ export class Editor implements EditorHost {
   }
 
   updateElements(elements: Element[]): void {
-    this.ctx.runCommand(new UpdateElementsCommand(this.document, elements));
+    if (this.editingComponentId) {
+      this.ctx.runCommand(
+        new UpdateComponentCommand(this.document, this.editingComponentId, elements),
+      );
+      return;
+    }
+    const shadowUpdates: Element[] = [];
+    const pageUpdates: Element[] = [];
+    for (const el of elements) {
+      const shadow = parseShadowId(el.id);
+      if (shadow) {
+        const instance = this.document.getElement(shadow.instanceId);
+        if (instance?.type === 'instance') {
+          const override: Partial<OverridableProps> = {};
+          if ('text' in el && el.type === 'text') override.text = el.text;
+          if (el.fills) override.fills = el.fills;
+          if (el.strokes) override.strokes = el.strokes;
+          if (el.visible !== undefined) override.visible = el.visible;
+          if (el.opacity !== undefined) override.opacity = el.opacity;
+          this.ctx.runCommand(
+            new UpdateInstanceOverrideCommand(
+              this.document,
+              shadow.instanceId,
+              shadow.innerNodeId,
+              override,
+            ),
+          );
+        }
+      } else if (this.document.getElement(el.id)) {
+        pageUpdates.push(el);
+      }
+    }
+    if (pageUpdates.length > 0) {
+      this.ctx.runCommand(new UpdateElementsCommand(this.document, pageUpdates));
+    }
+    void shadowUpdates;
   }
 
   updateElementProperty(id: ID, patch: Partial<Element>): void {
+    const shadow = parseShadowId(id);
+    if (shadow) {
+      const override: Partial<OverridableProps> = {};
+      if ('text' in patch) override.text = patch.text as string;
+      if (patch.fills) override.fills = patch.fills;
+      if (patch.strokes) override.strokes = patch.strokes;
+      if (patch.visible !== undefined) override.visible = patch.visible;
+      if (patch.opacity !== undefined) override.opacity = patch.opacity;
+      this.ctx.runCommand(
+        new UpdateInstanceOverrideCommand(
+          this.document,
+          shadow.instanceId,
+          shadow.innerNodeId,
+          override,
+        ),
+      );
+      return;
+    }
+
+    if (this.editingComponentId) {
+      const component = this.document.getComponent(this.editingComponentId);
+      const el = component?.elements[id];
+      if (!el || !component) return;
+      this.ctx.runCommand(
+        new UpdateComponentCommand(this.document, this.editingComponentId, [
+          { ...el, ...patch } as Element,
+        ]),
+      );
+      return;
+    }
+
     const el = this.document.getElement(id);
     if (!el) return;
     this.ctx.runCommand(new UpdateElementsCommand(this.document, [{ ...el, ...patch } as Element]));
+  }
+
+  createComponent(): void {
+    const ids = this.selection.getIds();
+    if (ids.length !== 1) return;
+    const el = this.document.getElement(ids[0]);
+    if (!el || el.type !== 'frame') return;
+    this.ctx.runCommand(new CreateComponentCommand(this.document, el.id));
+    this.selection.select([el.id]);
+  }
+
+  applyAutoLayout(): void {
+    const ids = this.selection.getIds();
+    if (ids.length === 0) return;
+    this.ctx.runCommand(new ApplyAutoLayoutCommand(this.document, ids));
+  }
+
+  instantiateComponentAt(def: ComponentDef, worldX: number, worldY: number): ID | null {
+    const cmd = new InstantiateComponentCommand(this.document, def, worldX, worldY, null);
+    this.ctx.runCommand(cmd);
+    if (cmd.instanceId) this.selection.select([cmd.instanceId]);
+    return cmd.instanceId;
+  }
+
+  detachInstance(): void {
+    const ids = this.selection.getIds();
+    if (ids.length !== 1) return;
+    const el = this.document.getElement(ids[0]);
+    if (!el || el.type !== 'instance') return;
+    this.ctx.runCommand(new DetachInstanceCommand(this.document, el.id));
+    this.selection.select([el.id]);
+  }
+
+  enterDeepSelection(instanceId: ID): void {
+    this.deepInstanceId = instanceId;
+  }
+
+  exitDeepSelection(): void {
+    this.deepInstanceId = null;
+  }
+
+  getDeepInstanceId(): ID | null {
+    return this.deepInstanceId;
+  }
+
+  editMasterComponent(componentId: ID): void {
+    this.editingComponentId = componentId;
+    this.exitDeepSelection();
+    this.selection.clear();
+  }
+
+  exitMasterEdit(): void {
+    this.editingComponentId = null;
+  }
+
+  getEditingComponentId(): ID | null {
+    return this.editingComponentId;
+  }
+
+  getComponents(): ComponentDef[] {
+    return Object.values(this.document.getComponents());
   }
 
   group(): void {
@@ -373,7 +511,7 @@ export class Editor implements EditorHost {
 
   moveElementInTree(elementId: ID, newParentId: ID | null, beforeSiblingId: ID | null): void {
     moveElementInTree(this.document, this.sceneGraph, elementId, newParentId, beforeSiblingId);
-    this.sceneGraph.rebuild(this.document.getElements());
+    this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
     refreshBoundArrows(this.ctx);
     this.markSceneDirty();
     this.callbacks.onDocumentChange?.();

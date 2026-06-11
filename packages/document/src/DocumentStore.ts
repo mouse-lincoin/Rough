@@ -1,6 +1,11 @@
 import * as Y from 'yjs';
 import { IndexeddbPersistence } from 'y-indexeddb';
-import type { Element, ID, Page, RGBA, RoughDocument, Vec2 } from '@rough/schema';
+import type { ComponentDef, Element, ID, Page, RGBA, RoughDocument, Vec2 } from '@rough/schema';
+import {
+  applyComponentToYMap,
+  componentToYMap,
+  componentsFromYDoc,
+} from './componentMapping.js';
 import { CANVAS_BACKGROUND, createId, generateKeyBetween } from '@rough/shared';
 import { CURRENT_SCHEMA_VERSION } from '@rough/schema';
 import { LOCAL_ORIGIN, PREVIEW_ORIGIN } from './constants.js';
@@ -124,7 +129,7 @@ export class DocumentStore {
       name: (meta.get('name') as string) ?? '未命名',
       pages: pagesRecord,
       pageOrder: pageOrder.toArray(),
-      components: components.toJSON() as RoughDocument['components'],
+      components: componentsFromYDoc(components),
       assets: assets.toJSON() as RoughDocument['assets'],
     };
   }
@@ -332,6 +337,32 @@ export class DocumentStore {
     this.transact(() => {
       this.ydoc.getMap('assets').set(ref.id, ref);
     });
+  }
+
+  getComponents(): Record<ID, ComponentDef> {
+    return componentsFromYDoc(this.ydoc.getMap('components'));
+  }
+
+  getComponent(id: ID): ComponentDef | undefined {
+    return this.getComponents()[id];
+  }
+
+  setComponent(def: ComponentDef, origin: string = LOCAL_ORIGIN): void {
+    this.transact(() => {
+      const components = this.ydoc.getMap('components');
+      const existing = components.get(def.id);
+      if (existing instanceof Y.Map) {
+        applyComponentToYMap(existing, def);
+      } else {
+        components.set(def.id, componentToYMap(def));
+      }
+    }, origin);
+  }
+
+  removeComponent(id: ID, origin: string = LOCAL_ORIGIN): void {
+    this.transact(() => {
+      this.ydoc.getMap('components').delete(id);
+    }, origin);
   }
 
   destroy(): void {

@@ -1,4 +1,4 @@
-import type { Element, Vec2 } from '@rough/schema';
+import type { Element, ID, Vec2 } from '@rough/schema';
 import { distanceToSegment } from '@rough/shared';
 import type { SceneGraph } from '../scene/SceneGraph.js';
 import type { SceneNode } from '../scene/SceneNode.js';
@@ -84,6 +84,7 @@ function hitTestLocalPoint(element: Element, local: Vec2, zoom: number): boolean
       return distanceToSegment(local, p0, p1) <= threshold;
     }
     case 'group':
+    case 'instance':
       return false;
     case 'path': {
       for (let i = 1; i < element.points.length; i++) {
@@ -115,10 +116,27 @@ function hitTestLocalPoint(element: Element, local: Vec2, zoom: number): boolean
   }
 }
 
-export function hitTestPoint(sceneGraph: SceneGraph, world: Vec2, zoom: number): SceneNode | null {
+export function hitTestPoint(
+  sceneGraph: SceneGraph,
+  world: Vec2,
+  zoom: number,
+  deepInstanceId: ID | null = null,
+): SceneNode | null {
   for (const node of sceneGraph.traverseTopDown()) {
     const el = node.element;
     if (!el.visible || el.locked) continue;
+
+    if (node.isShadow && node.shadowMeta) {
+      if (deepInstanceId && node.shadowMeta.instanceId !== deepInstanceId) continue;
+      const local = worldToLocal(node.worldMatrix, world);
+      if (!local) continue;
+      if (!hitTestLocalPoint(el, local, zoom)) continue;
+      if (deepInstanceId) return node;
+      const instanceNode = sceneGraph.getNode(node.shadowMeta.instanceId);
+      if (instanceNode) return instanceNode;
+      continue;
+    }
+
     const local = worldToLocal(node.worldMatrix, world);
     if (!local) continue;
     if (hitTestLocalPoint(el, local, zoom)) {

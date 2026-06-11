@@ -5,6 +5,7 @@ import type { SelectionManager } from './interactions/selection.js';
 import type { Viewport } from './render/viewport.js';
 import type { ToolName } from './types.js';
 import type { Command } from './undo/Command.js';
+import { applyLayoutToDocument } from './layout/autoLayout.js';
 
 export interface EditorHost {
   requestRender(): void;
@@ -50,12 +51,16 @@ export class EditorContext {
   }
 
   rebuildScene(): void {
-    this.sceneGraph.rebuild(this.document.getElements());
+    this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
     this.markSceneDirty();
   }
 
   runCommand(command: Command): void {
     command.execute();
+    const layoutUpdates = applyLayoutToDocument(this.document.getElements());
+    if (layoutUpdates.length > 0) {
+      this.document.setElements(layoutUpdates);
+    }
     this.rebuildScene();
   }
 
