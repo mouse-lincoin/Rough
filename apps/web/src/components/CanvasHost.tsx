@@ -2,14 +2,32 @@ import { useEffect, useRef } from 'react';
 import { DocumentStore } from '@rough/document';
 import { Editor } from '@rough/editor';
 import { useEditorStore } from '../stores/editorStore';
+import { attachE2EBridge } from '../e2eBridge';
 
 interface CanvasHostProps {
   docId: string;
   docName: string;
   editorRef: React.MutableRefObject<Editor | null>;
+  onExportRequest?: () => void;
+  onShortcutsRequest?: () => void;
+  onCommentPlace?: (anchor: {
+    pageId: string;
+    worldX: number;
+    worldY: number;
+    elementId: string | null;
+  }) => void;
+  readOnly?: boolean;
 }
 
-export function CanvasHost({ docId, docName, editorRef }: CanvasHostProps): JSX.Element {
+export function CanvasHost({
+  docId,
+  docName,
+  editorRef,
+  onExportRequest,
+  onShortcutsRequest,
+  onCommentPlace,
+  readOnly = false,
+}: CanvasHostProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const mainCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -46,10 +64,18 @@ export function CanvasHost({ docId, docName, editorRef }: CanvasHostProps): JSX.
           onDocumentChange: bumpDocumentVersion,
           onPageChange: setCurrentPageId,
           onPanelsToggle: setPanelsVisible,
+          onExportRequest,
+          onShortcutsRequest,
+          onCommentPlace,
         },
       });
 
+      if (readOnly) editor.setReadOnly(true);
+      attachE2EBridge(editor);
+      performance.mark('rough-editor-ready');
+
       editorRef.current = editor;
+      (window as unknown as { __ROUGH_EDITOR__?: Editor }).__ROUGH_EDITOR__ = editor;
       setCurrentPageId(editor.getCurrentPageId());
       setPanelsVisible(editor.getPanelsVisible());
     };
@@ -60,6 +86,7 @@ export function CanvasHost({ docId, docName, editorRef }: CanvasHostProps): JSX.
       destroyed = true;
       editor?.destroy();
       editorRef.current = null;
+      delete (window as unknown as { __ROUGH_EDITOR__?: Editor }).__ROUGH_EDITOR__;
     };
   }, [
     docId,
@@ -70,6 +97,10 @@ export function CanvasHost({ docId, docName, editorRef }: CanvasHostProps): JSX.
     bumpDocumentVersion,
     setCurrentPageId,
     setPanelsVisible,
+    onExportRequest,
+    onShortcutsRequest,
+    onCommentPlace,
+    readOnly,
   ]);
 
   return (

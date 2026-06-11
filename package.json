@@ -9,7 +9,9 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "check:bundle": "node scripts/check-bundle-size.mjs",
+    "test:e2e": "pnpm --filter @rough/e2e test"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

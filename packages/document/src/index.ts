@@ -1,7 +1,14 @@
 export { DocumentStore } from './DocumentStore.js';
 export { DocumentUndoManager } from './undo.js';
-export { LOCAL_ORIGIN, PREVIEW_ORIGIN } from './constants.js';
+export { LOCAL_ORIGIN, PREVIEW_ORIGIN, COLLAB_ORIGIN } from './constants.js';
+export { CollabSession, type CollabOptions } from './collab.js';
 export { elementToYMap, yMapToElement, applyElementToYMap } from './yjsMapping.js';
+export {
+  componentToYMap,
+  yMapToComponent,
+  applyComponentToYMap,
+  componentsFromYDoc,
+} from './componentMapping.js';
 export {
   listDocuments,
   getDocumentMeta,
@@ -12,3 +19,8 @@ export {
   type DocumentMeta,
 } from './metaStore.js';
 export { storeAssetBlob, getAssetBlob, deleteDocumentAssets } from './assetStore.js';
+export {
+  saveDocumentThumbnail,
+  getDocumentThumbnail,
+  deleteDocumentThumbnail,
+} from './thumbnailStore.js';

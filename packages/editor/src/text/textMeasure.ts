@@ -12,10 +12,22 @@ export interface TextLayout {
   height: number;
 }
 
-const measureCanvas = document.createElement('canvas');
-const measureCtx = measureCanvas.getContext('2d')!;
-
 const layoutCache = new LRUCache<string, TextLayout>({ max: 500 });
+
+let measureCtx: CanvasRenderingContext2D | null = null;
+
+function getMeasureCtx(): CanvasRenderingContext2D | null {
+  if (measureCtx) return measureCtx;
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  measureCtx = canvas.getContext('2d');
+  return measureCtx;
+}
+
+/** Rough width estimate when canvas measureText is unavailable (e.g. node tests). */
+function estimateTextWidth(text: string, fontSize: number): number {
+  return text.length * fontSize * 0.55;
+}
 
 function fontString(style: TextStyle): string {
   return `${style.fontWeight} ${style.fontSize}px ${style.fontFamily}`;
@@ -38,7 +50,11 @@ export function measureTextLayout(
   const cached = layoutCache.get(key);
   if (cached) return cached;
 
-  measureCtx.font = fontString(style);
+  const ctx = getMeasureCtx();
+  const measureWidth = (s: string): number =>
+    ctx ? ctx.measureText(s).width : estimateTextWidth(s, style.fontSize);
+
+  if (ctx) ctx.font = fontString(style);
   const lineHeight = style.fontSize * style.lineHeight;
   const paragraphs = text.split('\n');
   const lines: TextLayoutLine[] = [];
@@ -50,27 +66,27 @@ export function measureTextLayout(
     }
 
     if (maxWidth === null) {
-      lines.push({ text: paragraph, width: measureCtx.measureText(paragraph).width });
+      lines.push({ text: paragraph, width: measureWidth(paragraph) });
       continue;
     }
 
     let current = '';
     for (const char of paragraph) {
       const test = current + char;
-      const w = measureCtx.measureText(test).width;
+      const w = measureWidth(test);
       const breakHere =
         w > maxWidth &&
         current.length > 0 &&
-        (char === ' ' || isCJK(char) || measureCtx.measureText(current).width > maxWidth);
+        (char === ' ' || isCJK(char) || measureWidth(current) > maxWidth);
       if (breakHere) {
-        lines.push({ text: current.trimEnd(), width: measureCtx.measureText(current.trimEnd()).width });
+        lines.push({ text: current.trimEnd(), width: measureWidth(current.trimEnd()) });
         current = isCJK(char) ? char : char.trimStart();
       } else {
         current = test;
       }
     }
     if (current.length > 0) {
-      lines.push({ text: current, width: measureCtx.measureText(current).width });
+      lines.push({ text: current, width: measureWidth(current) });
     }
   }
 

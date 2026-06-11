@@ -1,6 +1,6 @@
 import type { DocumentStore } from '@rough/document';
 import { storeAssetBlob } from '@rough/document';
-import type { Element, ID, Page, Stroke, FillStyle } from '@rough/schema';
+import type { ComponentDef, Element, ID, Page, Stroke, FillStyle, OverridableProps } from '@rough/schema';
 import { AddElementCommand, UpdateElementsCommand } from './commands/ElementCommands.js';
 import { createImage } from './document/elementFactory.js';
 import { SceneGraph } from './scene/SceneGraph.js';
@@ -13,7 +13,22 @@ import { ToolManager } from './input/ToolManager.js';
 import { InputPipeline } from './input/InputPipeline.js';
 import { TextEditorOverlay } from './text/textEditorOverlay.js';
 import { ImageCache } from './render/imageCache.js';
-import type { EditorCallbacks, ToolName } from './types.js';
+import {
+  exportToJson,
+  exportToSvg,
+  generateAiPrompt,
+  inferMarkdown,
+  packPngExports,
+  parseRoughDocument,
+  resolveExportTargets,
+  type AiPromptFramework,
+} from '@rough/export';
+import { getAssetBlob, saveDocumentThumbnail } from '@rough/document';
+import { capturePageThumbnail } from './export/thumbnailCapture.js';
+import type { ExportContext, EditorCallbacks, ToolName } from './types.js';
+import { renderRootsToPngBlobs } from './export/offscreenRender.js';
+import { AwarenessSync, type RemotePeer } from './collab/AwarenessSync.js';
+import type { CollabOptions } from '@rough/document';
 import type { SnapGuide } from './interactions/snapping.js';
 import {
   alignSelection,
@@ -33,6 +48,15 @@ import {
   ungroupSelection,
 } from './EditorActions.js';
 import type { AlignType } from './interactions/align.js';
+import {
+  ApplyAutoLayoutCommand,
+  CreateComponentCommand,
+  DetachInstanceCommand,
+  InstantiateComponentCommand,
+  UpdateComponentCommand,
+  UpdateInstanceOverrideCommand,
+} from './commands/componentCommands.js';
+import { parseShadowId } from './components/instanceExpansion.js';
 
 export interface EditorOptions {
   container: HTMLElement;
@@ -71,6 +95,11 @@ export class Editor implements EditorHost {
   private mainCanvas: HTMLCanvasElement;
   private overlayCanvas: HTMLCanvasElement;
   private copiedStyle: { fills: FillStyle[]; strokes: Stroke[]; roughness: number } | null = null;
+  private deepInstanceId: ID | null = null;
+  private editingComponentId: ID | null = null;
+  private awareness: AwarenessSync | null = null;
+  private remotePeers: RemotePeer[] = [];
+  private thumbnailTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: EditorOptions) {
     this.callbacks = options.callbacks ?? {};
@@ -94,17 +123,19 @@ export class Editor implements EditorHost {
 
     this.selection.subscribe((ids) => {
       this.callbacks.onSelectionChange?.(ids);
+      this.awareness?.publishSelection(ids, this.document.getCurrentPageId());
       this.requestRender();
     });
 
     this.document.subscribe(() => {
-      this.sceneGraph.rebuild(this.document.getElements());
+      this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
       refreshBoundArrows(this.ctx);
       this.markSceneDirty();
       this.callbacks.onDocumentChange?.();
+      this.scheduleThumbnailCapture();
     });
 
-    this.sceneGraph.rebuild(this.document.getElements());
+    this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
     this.setupCanvases(options);
     this.input = new InputPipeline(
       options.container,
@@ -198,6 +229,8 @@ export class Editor implements EditorHost {
       marqueeRect: selectTool.getMarqueeRect(),
       transformHandle: null,
       snapGuides: this.snapGuides,
+      remotePeers: this.remotePeers,
+      currentPageId: this.document.getCurrentPageId(),
     });
   }
 
@@ -296,7 +329,7 @@ export class Editor implements EditorHost {
       this.height,
       (id) => this.callbacks.onPageChange?.(id),
     );
-    this.sceneGraph.rebuild(this.document.getElements());
+    this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
     this.markSceneDirty();
     this.callbacks.onDocumentChange?.();
   }
@@ -309,7 +342,7 @@ export class Editor implements EditorHost {
 
   removePage(pageId: ID): void {
     this.document.removePage(pageId);
-    this.sceneGraph.rebuild(this.document.getElements());
+    this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
     this.callbacks.onDocumentChange?.();
   }
 
@@ -324,13 +357,140 @@ export class Editor implements EditorHost {
   }
 
   updateElements(elements: Element[]): void {
-    this.ctx.runCommand(new UpdateElementsCommand(this.document, elements));
+    if (this.editingComponentId) {
+      this.ctx.runCommand(
+        new UpdateComponentCommand(this.document, this.editingComponentId, elements),
+      );
+      return;
+    }
+    const shadowUpdates: Element[] = [];
+    const pageUpdates: Element[] = [];
+    for (const el of elements) {
+      const shadow = parseShadowId(el.id);
+      if (shadow) {
+        const instance = this.document.getElement(shadow.instanceId);
+        if (instance?.type === 'instance') {
+          const override: Partial<OverridableProps> = {};
+          if ('text' in el && el.type === 'text') override.text = el.text;
+          if (el.fills) override.fills = el.fills;
+          if (el.strokes) override.strokes = el.strokes;
+          if (el.visible !== undefined) override.visible = el.visible;
+          if (el.opacity !== undefined) override.opacity = el.opacity;
+          this.ctx.runCommand(
+            new UpdateInstanceOverrideCommand(
+              this.document,
+              shadow.instanceId,
+              shadow.innerNodeId,
+              override,
+            ),
+          );
+        }
+      } else if (this.document.getElement(el.id)) {
+        pageUpdates.push(el);
+      }
+    }
+    if (pageUpdates.length > 0) {
+      this.ctx.runCommand(new UpdateElementsCommand(this.document, pageUpdates));
+    }
+    void shadowUpdates;
   }
 
   updateElementProperty(id: ID, patch: Partial<Element>): void {
+    const shadow = parseShadowId(id);
+    if (shadow) {
+      const override: Partial<OverridableProps> = {};
+      if ('text' in patch) override.text = patch.text as string;
+      if (patch.fills) override.fills = patch.fills;
+      if (patch.strokes) override.strokes = patch.strokes;
+      if (patch.visible !== undefined) override.visible = patch.visible;
+      if (patch.opacity !== undefined) override.opacity = patch.opacity;
+      this.ctx.runCommand(
+        new UpdateInstanceOverrideCommand(
+          this.document,
+          shadow.instanceId,
+          shadow.innerNodeId,
+          override,
+        ),
+      );
+      return;
+    }
+
+    if (this.editingComponentId) {
+      const component = this.document.getComponent(this.editingComponentId);
+      const el = component?.elements[id];
+      if (!el || !component) return;
+      this.ctx.runCommand(
+        new UpdateComponentCommand(this.document, this.editingComponentId, [
+          { ...el, ...patch } as Element,
+        ]),
+      );
+      return;
+    }
+
     const el = this.document.getElement(id);
     if (!el) return;
     this.ctx.runCommand(new UpdateElementsCommand(this.document, [{ ...el, ...patch } as Element]));
+  }
+
+  createComponent(): void {
+    const ids = this.selection.getIds();
+    if (ids.length !== 1) return;
+    const el = this.document.getElement(ids[0]);
+    if (!el || el.type !== 'frame') return;
+    this.ctx.runCommand(new CreateComponentCommand(this.document, el.id));
+    this.selection.select([el.id]);
+  }
+
+  applyAutoLayout(): void {
+    const ids = this.selection.getIds();
+    if (ids.length === 0) return;
+    this.ctx.runCommand(new ApplyAutoLayoutCommand(this.document, ids));
+  }
+
+  instantiateComponentAt(def: ComponentDef, worldX: number, worldY: number): ID | null {
+    const cmd = new InstantiateComponentCommand(this.document, def, worldX, worldY, null);
+    this.ctx.runCommand(cmd);
+    if (cmd.instanceId) this.selection.select([cmd.instanceId]);
+    return cmd.instanceId;
+  }
+
+  detachInstance(): void {
+    const ids = this.selection.getIds();
+    if (ids.length !== 1) return;
+    const el = this.document.getElement(ids[0]);
+    if (!el || el.type !== 'instance') return;
+    this.ctx.runCommand(new DetachInstanceCommand(this.document, el.id));
+    this.selection.select([el.id]);
+  }
+
+  enterDeepSelection(instanceId: ID): void {
+    this.deepInstanceId = instanceId;
+  }
+
+  exitDeepSelection(): void {
+    this.deepInstanceId = null;
+  }
+
+  getDeepInstanceId(): ID | null {
+    return this.deepInstanceId;
+  }
+
+  editMasterComponent(componentId: ID): void {
+    this.editingComponentId = componentId;
+    this.exitDeepSelection();
+    this.selection.clear();
+  }
+
+  exitMasterEdit(): void {
+    this.editingComponentId = null;
+  }
+
+  getEditingComponentId(): ID | null {
+    return this.editingComponentId;
+  }
+
+  getComponents(): ComponentDef[] {
+    return Object.values(this.document.getComponents());
   }
 
   group(): void {
@@ -373,7 +533,7 @@ export class Editor implements EditorHost {
 
   moveElementInTree(elementId: ID, newParentId: ID | null, beforeSiblingId: ID | null): void {
     moveElementInTree(this.document, this.sceneGraph, elementId, newParentId, beforeSiblingId);
-    this.sceneGraph.rebuild(this.document.getElements());
+    this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
     refreshBoundArrows(this.ctx);
     this.markSceneDirty();
     this.callbacks.onDocumentChange?.();
@@ -450,6 +610,144 @@ export class Editor implements EditorHost {
     this.textEditor.startEditing(element);
   }
 
+  requestExport(): void {
+    this.callbacks.onExportRequest?.();
+  }
+
+  requestShortcutsHelp(): void {
+    this.callbacks.onShortcutsRequest?.();
+  }
+
+  private scheduleThumbnailCapture(): void {
+    if (this.thumbnailTimer) clearTimeout(this.thumbnailTimer);
+    this.thumbnailTimer = setTimeout(() => {
+      void this.captureAndSaveThumbnail();
+    }, 10_000);
+  }
+
+  async captureAndSaveThumbnail(): Promise<void> {
+    const page = this.document.getPage();
+    const dataUrl = await capturePageThumbnail({
+      elements: page.elements,
+      components: this.document.getComponents(),
+      background: page.background,
+      cleanMode: this.cleanMode,
+      imageCache: this.imageCache,
+    });
+    if (!dataUrl) return;
+    await saveDocumentThumbnail(this.document.getDocumentId(), dataUrl);
+    this.callbacks.onThumbnailUpdated?.();
+  }
+
+  connectCollab(options: CollabOptions & { user: { id: string; name: string } }): void {
+    this.document.connectCollab(options);
+    this.awareness?.destroy();
+    this.awareness = new AwarenessSync(this.document, this.viewport, options.user);
+    this.awareness.start(
+      () => this.document.getCurrentPageId(),
+      (peers) => {
+        this.remotePeers = peers;
+        this.requestRender();
+      },
+    );
+    void this.document.waitForCollabSynced().then((ok) => {
+      if (ok) this.document.reconcileCurrentPage();
+    });
+  }
+
+  disconnectCollab(): void {
+    this.awareness?.destroy();
+    this.awareness = null;
+    this.remotePeers = [];
+    this.document.disconnectCollab();
+    this.requestRender();
+  }
+
+  publishPointer(world: import('@rough/schema').Vec2): void {
+    this.awareness?.publishPointer(world, this.selection.selectedIds, this.document.getCurrentPageId());
+  }
+
+  setReadOnly(readOnly: boolean): void {
+    this.document.setReadOnly(readOnly);
+  }
+
+  isReadOnly(): boolean {
+    return this.document.isReadOnly();
+  }
+
+  placeComment(worldX: number, worldY: number): void {
+    this.callbacks.onCommentPlace?.({
+      pageId: this.document.getCurrentPageId(),
+      worldX,
+      worldY,
+      elementId: [...this.selection.selectedIds][0] ?? null,
+    });
+  }
+
+  getExportContext(): ExportContext {
+    const selectionIds = [...this.selection.selectedIds];
+    const elements = this.document.getElements();
+    return {
+      pageId: this.document.getCurrentPageId(),
+      selectionIds,
+      exportTargetIds: resolveExportTargets(elements, selectionIds),
+    };
+  }
+
+  getMarkdownExport(frameIds?: ID[]): string {
+    const ctx = this.getExportContext();
+    const ids = frameIds ?? ctx.exportTargetIds;
+    return inferMarkdown(this.document.getDocument(), ctx.pageId, ids);
+  }
+
+  getAiPromptExport(framework: AiPromptFramework = 'react-tailwind', frameIds?: ID[]): string {
+    return generateAiPrompt(this.getMarkdownExport(frameIds), framework);
+  }
+
+  getJsonExport(): string {
+    return exportToJson(this.document.getDocument());
+  }
+
+  async exportPng(scale: 1 | 2 | 4 = 2): Promise<Blob> {
+    const ctx = this.getExportContext();
+    const doc = this.document.getDocument();
+    const page = doc.pages[ctx.pageId];
+    const files = await renderRootsToPngBlobs({
+      elements: page?.elements ?? {},
+      components: this.document.getComponents(),
+      rootIds: ctx.exportTargetIds,
+      background: page?.background ?? { r: 248, g: 248, b: 244, a: 1 },
+      scale,
+      cleanMode: this.cleanMode,
+      imageCache: this.imageCache,
+    });
+    return packPngExports(files);
+  }
+
+  async exportSvg(): Promise<string> {
+    const ctx = this.getExportContext();
+    const page = this.document.getPage();
+    return exportToSvg(
+      page.elements,
+      ctx.exportTargetIds,
+      this.document.getComponents(),
+      async (assetId) => {
+        const blob = await getAssetBlob(assetId);
+        if (!blob) return null;
+        return blobToDataUrl(blob);
+      },
+    );
+  }
+
+  importJson(json: string): void {
+    const doc = parseRoughDocument(json);
+    this.document.replaceFromRoughDocument(doc);
+    this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
+    this.selection.clear();
+    this.markSceneDirty();
+    this.callbacks.onDocumentChange?.();
+  }
+
   async importImage(file: File, worldX: number, worldY: number): Promise<void> {
     const bitmap = await createImageBitmap(file);
     const ref = await storeAssetBlob(
@@ -471,11 +769,23 @@ export class Editor implements EditorHost {
 
   destroy(): void {
     this.persistViewport();
+    if (this.thumbnailTimer) clearTimeout(this.thumbnailTimer);
+    void this.captureAndSaveThumbnail();
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
     }
+    this.awareness?.destroy();
     this.input?.destroy();
     this.textEditor.destroy();
     this.document.destroy();
   }
+}
+
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }

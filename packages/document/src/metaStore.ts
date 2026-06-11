@@ -71,6 +71,8 @@ export async function updateDocumentMeta(id: string, patch: Partial<Pick<Documen
 export async function deleteDocumentMeta(id: string): Promise<void> {
   const db = await getDB();
   await db.delete('documents', id);
+  const { deleteDocumentThumbnail } = await import('./thumbnailStore.js');
+  await deleteDocumentThumbnail(id);
 }
 
 export async function touchDocumentMeta(id: string): Promise<void> {

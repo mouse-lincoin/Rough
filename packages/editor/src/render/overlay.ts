@@ -6,6 +6,7 @@ import type { Rect } from '../types.js';
 import type { HandleType } from '../interactions/transformHandles.js';
 import { getHandlePositions } from '../interactions/transformHandles.js';
 import type { SnapGuide } from '../interactions/snapping.js';
+import type { RemotePeer } from '../collab/AwarenessSync.js';
 
 const HANDLE_SIZE = 8;
 const ACCENT = '#6965DB';
@@ -15,6 +16,8 @@ export interface OverlayState {
   marqueeRect: Rect | null;
   transformHandle: HandleType | null;
   snapGuides: SnapGuide[];
+  remotePeers: RemotePeer[];
+  currentPageId: ID;
 }
 
 export class OverlayRenderer {
@@ -39,7 +42,61 @@ export class OverlayRenderer {
       this.drawSelection(ctx, sceneGraph, viewport, state.selectedIds);
     }
 
+    for (const peer of state.remotePeers) {
+      if (peer.state.pageId !== state.currentPageId) continue;
+      this.drawRemotePeer(ctx, sceneGraph, viewport, peer);
+    }
+
     ctx.restore();
+  }
+
+  private drawRemotePeer(
+    ctx: CanvasRenderingContext2D,
+    sceneGraph: SceneGraph,
+    viewport: Viewport,
+    peer: RemotePeer,
+  ): void {
+    const color = peer.state.user?.color ?? '#6965DB';
+    const name = peer.state.user?.name ?? 'User';
+
+    if (peer.state.selection?.length > 0) {
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      for (const id of peer.state.selection) {
+        const node = sceneGraph.getNode(id);
+        if (!node) continue;
+        const aabb = getWorldAABB(node);
+        const rect = aabbToRect(aabb);
+        const tl = viewport.worldToScreen({ x: rect.x, y: rect.y });
+        const br = viewport.worldToScreen({ x: rect.x + rect.width, y: rect.y + rect.height });
+        ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+      }
+      ctx.restore();
+    }
+
+    if (peer.state.cursor) {
+      const p = viewport.worldToScreen(peer.state.cursor);
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x + 10, p.y + 12);
+      ctx.lineTo(p.x + 4, p.y + 12);
+      ctx.lineTo(p.x + 2, p.y + 18);
+      ctx.closePath();
+      ctx.fill();
+      ctx.font = '11px Inter, sans-serif';
+      const labelW = ctx.measureText(name).width + 8;
+      ctx.fillStyle = color;
+      ctx.fillRect(p.x + 12, p.y + 4, labelW, 16);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(name, p.x + 16, p.y + 16);
+      ctx.restore();
+    }
   }
 
   private drawSnapGuides(

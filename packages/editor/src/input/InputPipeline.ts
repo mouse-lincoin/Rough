@@ -85,8 +85,10 @@ export class InputPipeline {
   };
 
   private onPointerMove = (e: PointerEvent): void => {
+    const normalized = this.normalize(e);
+    this.editor.publishPointer(normalized.world);
     if (!this.pointerDown) return;
-    this.getEffectiveTool().onPointerMove(this.normalize(e));
+    this.getEffectiveTool().onPointerMove(normalized);
   };
 
   private onPointerUp = (e: PointerEvent): void => {
@@ -264,28 +266,40 @@ export class InputPipeline {
       return;
     }
 
-    // Phase 4+ stubs
     if (mod && e.altKey && e.key === 'k') {
       e.preventDefault();
-      console.info('创建组件 (Phase 4)');
+      this.editor.createComponent();
       return;
     }
 
     if (e.shiftKey && e.key === 'A') {
       e.preventDefault();
-      console.info('Auto Layout (Phase 4)');
+      this.editor.applyAutoLayout();
       return;
+    }
+
+    if (e.key === 'Escape') {
+      if (this.editor.getDeepInstanceId()) {
+        e.preventDefault();
+        this.editor.exitDeepSelection();
+        return;
+      }
+      if (this.editor.getEditingComponentId()) {
+        e.preventDefault();
+        this.editor.exitMasterEdit();
+        return;
+      }
     }
 
     if (mod && e.key === 'e') {
       e.preventDefault();
-      console.info('导出 (Phase 5)');
+      this.editor.requestExport();
       return;
     }
 
     if (mod && e.key === '/') {
       e.preventDefault();
-      console.info('快捷键帮助 (Phase 7)');
+      this.editor.requestShortcutsHelp();
       return;
     }
 
@@ -317,10 +331,6 @@ export class InputPipeline {
 
     if (!mod && toolKeys[e.key]) {
       const tool = toolKeys[e.key];
-      if (tool === 'comment') {
-        console.info('评论工具 (Phase 6)');
-        return;
-      }
       this.tools.setTool(tool);
       this.onToolChange(this.tools.activeToolName);
       return;

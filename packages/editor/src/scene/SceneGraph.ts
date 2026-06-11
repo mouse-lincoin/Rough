@@ -1,17 +1,28 @@
-import type { Element, ID } from '@rough/schema';
+import type { ComponentDef, Element, ID } from '@rough/schema';
+import { expandAllInstances } from '../components/instanceExpansion.js';
 import { elementLocalMatrix, matMultiply, type Mat2D } from './transforms.js';
 import { SceneNode } from './SceneNode.js';
+import type { ShadowMeta } from '../components/instanceExpansion.js';
 
 export class SceneGraph {
   private nodes = new Map<ID, SceneNode>();
   roots: SceneNode[] = [];
+  shadowMeta = new Map<ID, ShadowMeta>();
 
-  rebuild(elements: Record<ID, Element>): void {
+  rebuild(
+    elements: Record<ID, Element>,
+    components: Record<ID, ComponentDef> = {},
+  ): void {
     this.nodes.clear();
     this.roots = [];
+    this.shadowMeta.clear();
 
-    for (const el of Object.values(elements)) {
-      this.nodes.set(el.id, new SceneNode({ ...el }));
+    const { expandedElements, shadowMeta } = expandAllInstances(elements, components);
+    this.shadowMeta = shadowMeta;
+
+    for (const el of Object.values(expandedElements)) {
+      const meta = shadowMeta.get(el.id) ?? null;
+      this.nodes.set(el.id, new SceneNode({ ...el }, meta));
     }
 
     for (const node of this.nodes.values()) {
@@ -55,7 +66,10 @@ export class SceneGraph {
     return this.nodes.get(id);
   }
 
-  /** Depth-first, bottom-to-top for rendering (lowest sortKey first) */
+  getShadowMeta(id: ID): ShadowMeta | undefined {
+    return this.shadowMeta.get(id);
+  }
+
   *traverseBottomUp(): Generator<SceneNode> {
     const walk = function* (nodes: SceneNode[]): Generator<SceneNode> {
       const sorted = [...nodes].sort((a, b) => {
@@ -70,7 +84,6 @@ export class SceneGraph {
     yield* walk(this.roots);
   }
 
-  /** Depth-first, top-to-bottom for hit testing (highest sortKey first) */
   *traverseTopDown(): Generator<SceneNode> {
     const walk = function* (nodes: SceneNode[]): Generator<SceneNode> {
       const sorted = [...nodes].sort((a, b) => {

@@ -1,9 +1,15 @@
 import * as Y from 'yjs';
 import { IndexeddbPersistence } from 'y-indexeddb';
-import type { Element, ID, Page, RGBA, RoughDocument, Vec2 } from '@rough/schema';
+import type { ComponentDef, Element, ID, Page, RGBA, RoughDocument, Vec2 } from '@rough/schema';
+import {
+  applyComponentToYMap,
+  componentToYMap,
+  componentsFromYDoc,
+} from './componentMapping.js';
 import { CANVAS_BACKGROUND, createId, generateKeyBetween } from '@rough/shared';
-import { CURRENT_SCHEMA_VERSION } from '@rough/schema';
+import { CURRENT_SCHEMA_VERSION, migrateDocument } from '@rough/schema';
 import { LOCAL_ORIGIN, PREVIEW_ORIGIN } from './constants.js';
+import { CollabSession, type CollabOptions } from './collab.js';
 import { DocumentUndoManager } from './undo.js';
 import {
   applyElementToYMap,
@@ -18,17 +24,22 @@ export class DocumentStore {
   readonly ydoc: Y.Doc;
   readonly undo: DocumentUndoManager;
   private persistence: IndexeddbPersistence | null = null;
+  private collab = new CollabSession();
   private listeners = new Set<Listener>();
   private currentPageId: ID;
   private documentId: ID;
+  private readOnly = false;
 
   private constructor(ydoc: Y.Doc, documentId: ID, currentPageId: ID) {
     this.ydoc = ydoc;
     this.documentId = documentId;
     this.currentPageId = currentPageId;
     this.undo = new DocumentUndoManager(ydoc);
-    this.ydoc.on('update', () => {
+    this.ydoc.on('update', (_update, origin) => {
       void touchDocumentMeta(this.documentId);
+      if (this.collab.isConnected() && origin !== LOCAL_ORIGIN && origin !== PREVIEW_ORIGIN) {
+        this.reconcileCurrentPage();
+      }
       this.notify();
     });
   }
@@ -124,7 +135,7 @@ export class DocumentStore {
       name: (meta.get('name') as string) ?? '未命名',
       pages: pagesRecord,
       pageOrder: pageOrder.toArray(),
-      components: components.toJSON() as RoughDocument['components'],
+      components: componentsFromYDoc(components),
       assets: assets.toJSON() as RoughDocument['assets'],
     };
   }
@@ -256,6 +267,7 @@ export class DocumentStore {
   }
 
   transact(fn: () => void, origin: string = LOCAL_ORIGIN): void {
+    if (this.readOnly && origin === LOCAL_ORIGIN) return;
     this.ydoc.transact(fn, origin);
   }
 
@@ -334,7 +346,132 @@ export class DocumentStore {
     });
   }
 
+  getComponents(): Record<ID, ComponentDef> {
+    return componentsFromYDoc(this.ydoc.getMap('components'));
+  }
+
+  getComponent(id: ID): ComponentDef | undefined {
+    return this.getComponents()[id];
+  }
+
+  setComponent(def: ComponentDef, origin: string = LOCAL_ORIGIN): void {
+    this.transact(() => {
+      const components = this.ydoc.getMap('components');
+      const existing = components.get(def.id);
+      if (existing instanceof Y.Map) {
+        applyComponentToYMap(existing, def);
+      } else {
+        components.set(def.id, componentToYMap(def));
+      }
+    }, origin);
+  }
+
+  removeComponent(id: ID, origin: string = LOCAL_ORIGIN): void {
+    this.transact(() => {
+      this.ydoc.getMap('components').delete(id);
+    }, origin);
+  }
+
+  replaceFromRoughDocument(doc: RoughDocument): void {
+    const migrated = migrateDocument(doc);
+    this.transact(() => {
+      const meta = this.ydoc.getMap('meta');
+      meta.set('name', migrated.name);
+      meta.set('schemaVersion', migrated.schemaVersion);
+      meta.set('id', migrated.id);
+
+      const pages = this.ydoc.getMap('pages');
+      pages.forEach((_, key) => pages.delete(key));
+
+      for (const pageId of migrated.pageOrder) {
+        const page = migrated.pages[pageId];
+        if (!page) continue;
+        const pageMap = new Y.Map<unknown>();
+        pageMap.set('id', pageId);
+        pageMap.set('name', page.name);
+        pageMap.set('background', structuredClone(page.background));
+        const elementsMap = new Y.Map<Y.Map<unknown>>();
+        for (const el of Object.values(page.elements)) {
+          elementsMap.set(el.id, elementToYMap(el));
+        }
+        pageMap.set('elements', elementsMap);
+        pages.set(pageId, pageMap);
+      }
+
+      const pageOrder = this.ydoc.getArray<ID>('pageOrder');
+      pageOrder.delete(0, pageOrder.length);
+      pageOrder.push(migrated.pageOrder);
+
+      const components = this.ydoc.getMap('components');
+      components.forEach((_, key) => components.delete(key));
+      for (const def of Object.values(migrated.components)) {
+        components.set(def.id, componentToYMap(def));
+      }
+
+      const assets = this.ydoc.getMap('assets');
+      assets.forEach((_, key) => assets.delete(key));
+      for (const [assetId, ref] of Object.entries(migrated.assets)) {
+        assets.set(assetId, structuredClone(ref));
+      }
+
+      this.currentPageId = migrated.pageOrder[0] ?? this.currentPageId;
+    });
+  }
+
+  connectCollab(options: CollabOptions): void {
+    this.collab.connect(this.ydoc, options);
+  }
+
+  disconnectCollab(): void {
+    this.collab.disconnect();
+  }
+
+  getCollabAwareness(): import('@hocuspocus/provider').HocuspocusProvider['awareness'] | null {
+    return this.collab.getAwareness();
+  }
+
+  isCollabConnected(): boolean {
+    return this.collab.isConnected();
+  }
+
+  waitForCollabSynced(timeoutMs?: number): Promise<boolean> {
+    return this.collab.waitForSynced(timeoutMs);
+  }
+
+  /** After collab merge, follow the page that actually has content. */
+  reconcileCurrentPage(): void {
+    const pages = this.ydoc.getMap('pages');
+    const pageOrder = this.ydoc.getArray<ID>('pageOrder');
+    let bestId: ID | null = null;
+    let bestCount = -1;
+
+    for (let i = 0; i < pageOrder.length; i++) {
+      const pageId = pageOrder.get(i) as ID;
+      const pageMap = pages.get(pageId) as Y.Map<unknown> | undefined;
+      const elementsMap = pageMap?.get('elements') as Y.Map<unknown> | undefined;
+      const count = elementsMap?.size ?? 0;
+      if (count > bestCount) {
+        bestCount = count;
+        bestId = pageId;
+      }
+    }
+
+    if (bestId && bestId !== this.currentPageId) {
+      this.currentPageId = bestId;
+      this.notify();
+    }
+  }
+
+  setReadOnly(readOnly: boolean): void {
+    this.readOnly = readOnly;
+  }
+
+  isReadOnly(): boolean {
+    return this.readOnly;
+  }
+
   destroy(): void {
+    this.collab.disconnect();
     this.persistence?.destroy();
     this.persistence = null;
   }
