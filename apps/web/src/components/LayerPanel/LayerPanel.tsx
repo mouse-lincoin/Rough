@@ -12,6 +12,13 @@ interface LayerRow {
   hasChildren: boolean;
 }
 
+type DropZone = 'before' | 'inside' | 'after';
+
+interface DropHint {
+  rowId: ID;
+  zone: DropZone;
+}
+
 interface LayerPanelProps {
   editorRef: React.RefObject<Editor | null>;
 }
@@ -53,6 +60,52 @@ function buildFlatRows(
   return rows;
 }
 
+function isDescendant(elements: Record<ID, Element>, ancestorId: ID, nodeId: ID): boolean {
+  let current = elements[nodeId];
+  while (current?.parentId) {
+    current = elements[current.parentId];
+    if (current?.id === ancestorId) return true;
+  }
+  return false;
+}
+
+function resolveDrop(
+  rows: LayerRow[],
+  dragId: ID,
+  targetRow: LayerRow,
+  zone: DropZone,
+  elements: Record<ID, Element>,
+): { parentId: ID | null; beforeSiblingId: ID | null } | null {
+  if (dragId === targetRow.id) return null;
+  if (isDescendant(elements, dragId, targetRow.id)) return null;
+
+  const targetIndex = rows.findIndex((r) => r.id === targetRow.id);
+  if (targetIndex < 0) return null;
+
+  if (zone === 'inside') {
+    if (targetRow.element.type !== 'frame' && targetRow.element.type !== 'group') return null;
+    return { parentId: targetRow.id, beforeSiblingId: null };
+  }
+
+  const parentId = targetRow.element.parentId;
+  if (zone === 'before') {
+    const rowAbove = targetIndex > 0 ? rows[targetIndex - 1] : null;
+    if (rowAbove && rowAbove.element.parentId === parentId) {
+      return { parentId, beforeSiblingId: rowAbove.id };
+    }
+    return { parentId, beforeSiblingId: null };
+  }
+
+  return { parentId, beforeSiblingId: targetRow.id };
+}
+
+function zoneFromPointer(offsetY: number, rowHeight: number, canNest: boolean): DropZone {
+  const ratio = offsetY / rowHeight;
+  if (canNest && ratio > 0.25 && ratio < 0.75) return 'inside';
+  if (ratio < 0.5) return 'before';
+  return 'after';
+}
+
 export function LayerPanel({ editorRef }: LayerPanelProps): JSX.Element {
   const selectedIds = useEditorStore((s) => s.selectedIds);
   const documentVersion = useEditorStore((s) => s.documentVersion);
@@ -62,6 +115,8 @@ export function LayerPanel({ editorRef }: LayerPanelProps): JSX.Element {
   const [editingId, setEditingId] = useState<ID | null>(null);
   const [editName, setEditName] = useState('');
   const [lastSelectedId, setLastSelectedId] = useState<ID | null>(null);
+  const [dragId, setDragId] = useState<ID | null>(null);
+  const [dropHint, setDropHint] = useState<DropHint | null>(null);
   const parentRef = useRef<HTMLDivElement>(null);
 
   const rows = useMemo(() => {
@@ -134,6 +189,53 @@ export function LayerPanel({ editorRef }: LayerPanelProps): JSX.Element {
     bumpDocumentVersion();
   };
 
+  const handleDragStart = (id: ID, e: React.DragEvent): void => {
+    const el = editorRef.current?.document.getElement(id);
+    if (!el || el.locked) {
+      e.preventDefault();
+      return;
+    }
+    setDragId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+  };
+
+  const handleDragOver = (row: LayerRow, e: React.DragEvent): void => {
+    if (!dragId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+    const canNest = row.element.type === 'frame' || row.element.type === 'group';
+    const zone = zoneFromPointer(offsetY, rect.height, canNest);
+    setDropHint({ rowId: row.id, zone });
+  };
+
+  const handleDrop = (row: LayerRow, e: React.DragEvent): void => {
+    e.preventDefault();
+    const editor = editorRef.current;
+    if (!editor || !dragId) return;
+
+    const elements = editor.document.getElements();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+    const canNest = row.element.type === 'frame' || row.element.type === 'group';
+    const zone = zoneFromPointer(offsetY, rect.height, canNest);
+    const target = resolveDrop(rows, dragId, row, zone, elements);
+    if (target) {
+      editor.moveElementInTree(dragId, target.parentId, target.beforeSiblingId);
+      bumpDocumentVersion();
+    }
+
+    setDragId(null);
+    setDropHint(null);
+  };
+
+  const handleDragEnd = (): void => {
+    setDragId(null);
+    setDropHint(null);
+  };
+
   return (
     <div className="panel layer-panel">
       <div className="panel-header">
@@ -145,10 +247,13 @@ export function LayerPanel({ editorRef }: LayerPanelProps): JSX.Element {
             const row = rows[vItem.index];
             const el = row.element;
             const isSelected = selectedIds.includes(el.id);
+            const isDragging = dragId === el.id;
+            const hint = dropHint?.rowId === row.id ? dropHint.zone : null;
+            const canNest = row.element.type === 'frame' || row.element.type === 'group';
             return (
               <div
                 key={row.id}
-                className={`layer-row ${isSelected ? 'selected' : ''} ${el.locked ? 'locked' : ''}`}
+                className={`layer-row ${isSelected ? 'selected' : ''} ${el.locked ? 'locked' : ''} ${isDragging ? 'dragging' : ''} ${hint === 'inside' ? 'drop-inside' : ''}`}
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -158,12 +263,22 @@ export function LayerPanel({ editorRef }: LayerPanelProps): JSX.Element {
                   transform: `translateY(${vItem.start}px)`,
                   paddingLeft: 8 + row.depth * 16,
                 }}
+                draggable={!el.locked}
+                onDragStart={(e) => handleDragStart(el.id, e)}
+                onDragOver={(e) => handleDragOver(row, e)}
+                onDrop={(e) => handleDrop(row, e)}
+                onDragEnd={handleDragEnd}
+                onDragLeave={() => {
+                  if (dropHint?.rowId === row.id) setDropHint(null);
+                }}
                 onClick={(e) => handleSelect(el.id, e)}
                 onDoubleClick={() => {
                   setEditingId(el.id);
                   setEditName(el.name);
                 }}
               >
+                {hint === 'before' && <div className="layer-drop-line layer-drop-line-top" />}
+                {hint === 'after' && <div className="layer-drop-line layer-drop-line-bottom" />}
                 {row.hasChildren ? (
                   <button
                     type="button"
@@ -191,6 +306,9 @@ export function LayerPanel({ editorRef }: LayerPanelProps): JSX.Element {
                   />
                 ) : (
                   <span className="layer-name">{el.name || el.type}</span>
+                )}
+                {hint === 'inside' && canNest && (
+                  <span className="layer-drop-inside-label">移入</span>
                 )}
                 <div className="layer-actions">
                   <button

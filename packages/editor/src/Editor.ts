@@ -30,6 +30,9 @@ import { renderRootsToPngBlobs } from './export/offscreenRender.js';
 import { AwarenessSync, type RemotePeer } from './collab/AwarenessSync.js';
 import type { CollabOptions } from '@rough/document';
 import type { SnapGuide } from './interactions/snapping.js';
+import { findDeepestContainerAtPoint } from './interactions/hitTest.js';
+import { canReparentTo, getSelectionRoots } from './interactions/treeUtils.js';
+import { collectSubtree } from './clipboard/clipboard.js';
 import {
   alignSelection,
   copySelection,
@@ -87,6 +90,7 @@ export class Editor implements EditorHost {
   private gridSnap = false;
   private panelsVisible = true;
   private snapGuides: SnapGuide[] = [];
+  private dropTargetFrameId: ID | null = null;
   private resizingIds = new Set<ID>();
   private width = 0;
   private height = 0;
@@ -229,6 +233,7 @@ export class Editor implements EditorHost {
       marqueeRect: selectTool.getMarqueeRect(),
       transformHandle: null,
       snapGuides: this.snapGuides,
+      dropTargetFrameId: this.dropTargetFrameId,
       remotePeers: this.remotePeers,
       currentPageId: this.document.getCurrentPageId(),
     });
@@ -280,6 +285,39 @@ export class Editor implements EditorHost {
   setSnapGuides(guides: SnapGuide[]): void {
     this.snapGuides = guides;
     this.requestRender();
+  }
+
+  setDropTargetFrame(frameId: ID | null): void {
+    this.dropTargetFrameId = frameId;
+    this.requestRender();
+  }
+
+  reparentElementsAtDrop(ids: ID[], world: import('@rough/schema').Vec2): void {
+    const elements = this.document.getElements();
+    const roots = getSelectionRoots(elements, ids);
+    const exclude = new Set<ID>();
+    for (const id of roots) {
+      for (const el of collectSubtree(elements, [id])) {
+        exclude.add(el.id);
+      }
+    }
+
+    const target = findDeepestContainerAtPoint(
+      this.sceneGraph,
+      world,
+      this.viewport.zoom,
+      exclude,
+    );
+
+    for (const id of roots) {
+      const el = this.document.getElement(id);
+      if (!el || el.parentId === target) continue;
+      if (!canReparentTo(elements, id, target)) continue;
+      moveElementInTree(this.ctx, id, target, null);
+    }
+
+    refreshBoundArrows(this.ctx);
+    this.callbacks.onDocumentChange?.();
   }
 
   getResizingIds(): Set<ID> {
@@ -532,10 +570,8 @@ export class Editor implements EditorHost {
   }
 
   moveElementInTree(elementId: ID, newParentId: ID | null, beforeSiblingId: ID | null): void {
-    moveElementInTree(this.document, this.sceneGraph, elementId, newParentId, beforeSiblingId);
-    this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
+    moveElementInTree(this.ctx, elementId, newParentId, beforeSiblingId);
     refreshBoundArrows(this.ctx);
-    this.markSceneDirty();
     this.callbacks.onDocumentChange?.();
   }
 

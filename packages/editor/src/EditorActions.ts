@@ -1,7 +1,5 @@
 import type { DocumentStore } from '@rough/document';
 import type { Element, ID, Page } from '@rough/schema';
-import { matApply } from './scene/transforms.js';
-import { worldToLocal } from './scene/bounds.js';
 import type { EditorContext } from './EditorContext.js';
 import { UpdateElementsCommand, DeleteElementsCommand } from './commands/ElementCommands.js';
 import { GroupElementsCommand, UngroupElementsCommand } from './commands/groupCommands.js';
@@ -19,6 +17,7 @@ import type { SelectionManager } from './interactions/selection.js';
 import type { Viewport } from './render/viewport.js';
 import { getWorldAABB, mergeAABB } from './scene/bounds.js';
 import type { SceneGraph } from './scene/SceneGraph.js';
+import { MoveElementInTreeCommand } from './commands/treeCommands.js';
 
 export function refreshBoundArrows(ctx: EditorContext): void {
   const updated = updateAllBoundArrows(ctx.document.getElements(), ctx.sceneGraph);
@@ -151,43 +150,14 @@ export function duplicateSelection(ctx: EditorContext, ids: ID[]): ID[] {
 }
 
 export function moveElementInTree(
-  store: DocumentStore,
-  sceneGraph: SceneGraph,
+  ctx: EditorContext,
   elementId: ID,
   newParentId: ID | null,
   beforeSiblingId: ID | null,
 ): void {
-  const el = store.getElement(elementId);
-  if (!el) return;
-
-  const node = sceneGraph.getNode(elementId);
-  if (!node) return;
-
-  const worldPos = matApply(node.worldMatrix, { x: 0, y: 0 });
-  let newSortKey: string;
-  if (beforeSiblingId) {
-    const siblings = store.getChildren(newParentId);
-    const idx = siblings.findIndex((s) => s.id === beforeSiblingId);
-    const prev = idx > 0 ? siblings[idx - 1] : null;
-    newSortKey = store.getSortKeyBetween(prev?.id ?? null, beforeSiblingId, newParentId);
-  } else {
-    newSortKey = store.getNextSortKey(newParentId);
-  }
-
-  let localX = worldPos.x;
-  let localY = worldPos.y;
-  if (newParentId) {
-    const parentNode = sceneGraph.getNode(newParentId);
-    if (parentNode) {
-      const local = worldToLocal(parentNode.worldMatrix, worldPos);
-      if (local) {
-        localX = local.x;
-        localY = local.y;
-      }
-    }
-  }
-
-  store.setElement({ ...el, parentId: newParentId, sortKey: newSortKey, x: localX, y: localY });
+  ctx.runCommand(
+    new MoveElementInTreeCommand(ctx.document, ctx.sceneGraph, elementId, newParentId, beforeSiblingId),
+  );
 }
 
 export function switchPage(

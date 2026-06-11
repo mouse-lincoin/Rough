@@ -146,6 +146,51 @@ export function hitTestPoint(
   return null;
 }
 
+function nodeTreeDepth(node: SceneNode): number {
+  let depth = 0;
+  let current = node.parent;
+  while (current) {
+    depth += 1;
+    current = current.parent;
+  }
+  return depth;
+}
+
+/** Deepest frame/group under a world point, excluding ids and their ancestors from consideration as targets. */
+export function findDeepestContainerAtPoint(
+  sceneGraph: SceneGraph,
+  world: Vec2,
+  _zoom: number,
+  excludeIds: Set<ID>,
+): ID | null {
+  let best: { id: ID; depth: number } | null = null;
+
+  for (const node of sceneGraph.traverseTopDown()) {
+    const el = node.element;
+    if (el.type !== 'frame' && el.type !== 'group') continue;
+    if (!el.visible || el.locked) continue;
+    if (excludeIds.has(el.id)) continue;
+
+    const local = worldToLocal(node.worldMatrix, world);
+    if (!local) continue;
+    if (
+      local.x < 0 ||
+      local.x > el.width ||
+      local.y < 0 ||
+      local.y > el.height
+    ) {
+      continue;
+    }
+
+    const depth = nodeTreeDepth(node);
+    if (!best || depth > best.depth) {
+      best = { id: el.id, depth };
+    }
+  }
+
+  return best?.id ?? null;
+}
+
 export function hitTestRect(
   sceneGraph: SceneGraph,
   rect: { x: number; y: number; width: number; height: number },

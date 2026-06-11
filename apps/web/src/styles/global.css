@@ -353,6 +353,39 @@ body,
   opacity: 0.6;
 }
 
+.layer-row.dragging {
+  opacity: 0.45;
+}
+
+.layer-row.drop-inside {
+  background: rgba(105, 101, 219, 0.14);
+  outline: 1px dashed #6965db;
+}
+
+.layer-drop-line {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  background: #6965db;
+  pointer-events: none;
+}
+
+.layer-drop-line-top {
+  top: 0;
+}
+
+.layer-drop-line-bottom {
+  bottom: 0;
+}
+
+.layer-drop-inside-label {
+  margin-left: auto;
+  margin-right: 4px;
+  font-size: 10px;
+  color: #6965db;
+}
+
 .layer-collapse-btn,
 .layer-collapse-spacer {
   width: 14px;
