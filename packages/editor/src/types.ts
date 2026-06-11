@@ -6,9 +6,12 @@ export type ToolName =
   | 'frame'
   | 'rectangle'
   | 'ellipse'
+  | 'polygon'
   | 'line'
+  | 'arrow'
   | 'pen'
-  | 'text';
+  | 'text'
+  | 'comment';
 
 export interface NormalizedPointerEvent {
   type: 'pointerdown' | 'pointermove' | 'pointerup';
@@ -26,6 +29,9 @@ export interface NormalizedPointerEvent {
 export interface EditorCallbacks {
   onSelectionChange?: (ids: Set<ID>) => void;
   onToolChange?: (tool: ToolName) => void;
+  onDocumentChange?: () => void;
+  onPageChange?: (pageId: ID) => void;
+  onPanelsToggle?: (visible: boolean) => void;
 }
 
 export interface Rect {

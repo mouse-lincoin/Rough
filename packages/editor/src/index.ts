@@ -5,3 +5,5 @@ export { SceneGraph } from './scene/SceneGraph.js';
 export { matApply, elementLocalMatrix } from './scene/transforms.js';
 export { getWorldAABB } from './scene/bounds.js';
 export { hitTestPoint } from './interactions/hitTest.js';
+export { ROUGH_CLIPBOARD_MIME } from './clipboard/clipboard.js';
+export type { AlignType } from './interactions/align.js';

@@ -71,6 +71,18 @@ export class Renderer {
 
     const nodeForceClean = forceClean || resizingIds.has(el.id);
 
+    if (el.type === 'group') {
+      const sortedChildren = [...node.children].sort((a, b) => {
+        const cmp = a.element.sortKey.localeCompare(b.element.sortKey);
+        return cmp !== 0 ? cmp : a.element.id.localeCompare(b.element.id);
+      });
+      for (const child of sortedChildren) {
+        this.renderNodeTree(ctx, child, viewport, forceClean, resizingIds, imageCache);
+      }
+      ctx.restore();
+      return;
+    }
+
     if (el.type === 'frame') {
       renderFrameBackground(ctx, node);
       renderFrameBorder(ctx, node, nodeForceClean);

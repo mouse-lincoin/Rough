@@ -14,6 +14,10 @@ export function CanvasHost({ docId, docName, editorRef }: CanvasHostProps): JSX.
   const mainCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const setActiveTool = useEditorStore((s) => s.setActiveTool);
+  const setSelectedIds = useEditorStore((s) => s.setSelectedIds);
+  const bumpDocumentVersion = useEditorStore((s) => s.bumpDocumentVersion);
+  const setCurrentPageId = useEditorStore((s) => s.setCurrentPageId);
+  const setPanelsVisible = useEditorStore((s) => s.setPanelsVisible);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -36,10 +40,18 @@ export function CanvasHost({ docId, docName, editorRef }: CanvasHostProps): JSX.
         mainCanvas,
         overlayCanvas,
         document,
-        callbacks: { onToolChange: setActiveTool },
+        callbacks: {
+          onToolChange: setActiveTool,
+          onSelectionChange: (ids) => setSelectedIds([...ids]),
+          onDocumentChange: bumpDocumentVersion,
+          onPageChange: setCurrentPageId,
+          onPanelsToggle: setPanelsVisible,
+        },
       });
 
       editorRef.current = editor;
+      setCurrentPageId(editor.getCurrentPageId());
+      setPanelsVisible(editor.getPanelsVisible());
     };
 
     void init();
@@ -49,7 +61,16 @@ export function CanvasHost({ docId, docName, editorRef }: CanvasHostProps): JSX.
       editor?.destroy();
       editorRef.current = null;
     };
-  }, [docId, docName, editorRef, setActiveTool]);
+  }, [
+    docId,
+    docName,
+    editorRef,
+    setActiveTool,
+    setSelectedIds,
+    bumpDocumentVersion,
+    setCurrentPageId,
+    setPanelsVisible,
+  ]);
 
   return (
     <div ref={containerRef} className="canvas-host" data-testid="canvas-host">

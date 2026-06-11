@@ -1,3 +1,4 @@
+import type { Editor } from '../Editor.js';
 import type { EditorContext } from '../EditorContext.js';
 import type { NormalizedPointerEvent, ToolName } from '../types.js';
 import type { ToolManager } from './ToolManager.js';
@@ -14,6 +15,7 @@ export class InputPipeline {
     private canvas: HTMLCanvasElement,
     private ctx: EditorContext,
     private tools: ToolManager,
+    private editor: Editor,
     private onToolChange: (tool: ToolName) => void,
   ) {
     this.bind();
@@ -117,6 +119,10 @@ export class InputPipeline {
 
   private onKeyDown = (e: KeyboardEvent): void => {
     const mod = e.metaKey || e.ctrlKey;
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+      return;
+    }
 
     if (e.key === ' ' && !this.spaceHeld) {
       this.spaceHeld = true;
@@ -142,6 +148,147 @@ export class InputPipeline {
       return;
     }
 
+    if (mod && e.key === 'c' && e.altKey) {
+      e.preventDefault();
+      this.editor.copyStyle();
+      return;
+    }
+
+    if (mod && e.key === 'v' && e.altKey) {
+      e.preventDefault();
+      this.editor.pasteStyle();
+      return;
+    }
+
+    if (mod && e.key === 'c' && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      void this.editor.copy();
+      return;
+    }
+
+    if (mod && e.key === 'x' && !e.shiftKey) {
+      e.preventDefault();
+      void this.editor.cut();
+      return;
+    }
+
+    if (mod && e.key === 'v' && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      const rect = this.canvas.getBoundingClientRect();
+      const world = this.ctx.viewport.screenToWorld({ x: rect.width / 2, y: rect.height / 2 });
+      void this.editor.pasteAt(world.x, world.y);
+      return;
+    }
+
+    if (mod && e.key === 'd' && !e.shiftKey) {
+      e.preventDefault();
+      this.editor.duplicate();
+      return;
+    }
+
+    if (mod && e.key === 'g' && e.shiftKey) {
+      e.preventDefault();
+      this.editor.ungroup();
+      return;
+    }
+
+    if (mod && e.key === 'g' && !e.shiftKey) {
+      e.preventDefault();
+      this.editor.group();
+      return;
+    }
+
+    if (mod && e.key === ']' && e.shiftKey) {
+      e.preventDefault();
+      this.editor.reorderLayer('front');
+      return;
+    }
+
+    if (mod && e.key === '[' && e.shiftKey) {
+      e.preventDefault();
+      this.editor.reorderLayer('back');
+      return;
+    }
+
+    if (!mod && e.key === ']') {
+      e.preventDefault();
+      this.editor.reorderLayer('forward');
+      return;
+    }
+
+    if (!mod && e.key === '[') {
+      e.preventDefault();
+      this.editor.reorderLayer('backward');
+      return;
+    }
+
+    if (mod && e.key === '0') {
+      e.preventDefault();
+      this.editor.zoomTo100();
+      return;
+    }
+
+    if (mod && e.key === '1') {
+      e.preventDefault();
+      this.editor.fitAll();
+      return;
+    }
+
+    if (mod && e.key === '2') {
+      e.preventDefault();
+      this.editor.fitSelection();
+      return;
+    }
+
+    if (mod && e.key === '\\') {
+      e.preventDefault();
+      this.editor.togglePanels();
+      return;
+    }
+
+    if (e.shiftKey && e.key === 'G') {
+      e.preventDefault();
+      this.editor.setGridSnap(!this.editor.getGridSnap());
+      return;
+    }
+
+    if (mod && (e.key === '=' || e.key === '+')) {
+      e.preventDefault();
+      this.editor.zoomIn();
+      return;
+    }
+
+    if (mod && e.key === '-') {
+      e.preventDefault();
+      this.editor.zoomOut();
+      return;
+    }
+
+    // Phase 4+ stubs
+    if (mod && e.altKey && e.key === 'k') {
+      e.preventDefault();
+      console.info('创建组件 (Phase 4)');
+      return;
+    }
+
+    if (e.shiftKey && e.key === 'A') {
+      e.preventDefault();
+      console.info('Auto Layout (Phase 4)');
+      return;
+    }
+
+    if (mod && e.key === 'e') {
+      e.preventDefault();
+      console.info('导出 (Phase 5)');
+      return;
+    }
+
+    if (mod && e.key === '/') {
+      e.preventDefault();
+      console.info('快捷键帮助 (Phase 7)');
+      return;
+    }
+
     const toolKeys: Record<string, ToolName> = {
       v: 'select',
       V: 'select',
@@ -152,18 +299,29 @@ export class InputPipeline {
       R: 'rectangle',
       o: 'ellipse',
       O: 'ellipse',
+      y: 'polygon',
+      Y: 'polygon',
       l: 'line',
       L: 'line',
+      a: 'arrow',
+      A: 'arrow',
       p: 'pen',
       P: 'pen',
       f: 'frame',
       F: 'frame',
       t: 'text',
       T: 'text',
+      c: 'comment',
+      C: 'comment',
     };
 
     if (!mod && toolKeys[e.key]) {
-      this.tools.setTool(toolKeys[e.key]);
+      const tool = toolKeys[e.key];
+      if (tool === 'comment') {
+        console.info('评论工具 (Phase 6)');
+        return;
+      }
+      this.tools.setTool(tool);
       this.onToolChange(this.tools.activeToolName);
       return;
     }

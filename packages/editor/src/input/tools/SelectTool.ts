@@ -11,8 +11,10 @@ import {
   type HandleType,
 } from '../../interactions/transformHandles.js';
 import { aabbToRect, getRotatedWorldCorners, getWorldAABB } from '../../scene/bounds.js';
+import { computeSnapAdjust } from '../../interactions/snapping.js';
 import type { NormalizedPointerEvent, Rect } from '../../types.js';
 import type { Tool } from './BaseTool.js';
+import type { EditorHost } from '../../EditorContext.js';
 
 type DragMode = 'move' | 'resize' | 'rotate' | 'marquee' | null;
 
@@ -27,7 +29,10 @@ export class SelectTool implements Tool {
   private marqueeRect: Rect | null = null;
   private marqueeAdditive = false;
 
-  constructor(private ctx: EditorContext) {}
+  constructor(
+    private ctx: EditorContext,
+    private host?: EditorHost & { getGridSnap?: () => boolean; setSnapGuides?: (guides: import('../../interactions/snapping.js').SnapGuide[]) => void },
+  ) {}
 
   getMarqueeRect(): Rect | null {
     return this.marqueeRect;
@@ -110,10 +115,48 @@ export class SelectTool implements Tool {
     const dy = e.world.y - this.dragStartWorld.y;
 
     if (this.mode === 'move') {
+      let snapDx = dx;
+      let snapDy = dy;
+      const gridSnap = this.host?.getGridSnap?.() ?? false;
+
+      if (this.beforeSnapshots.length > 0) {
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        for (const el of this.beforeSnapshots) {
+          minX = Math.min(minX, el.x + dx);
+          minY = Math.min(minY, el.y + dy);
+          maxX = Math.max(maxX, el.x + el.width + dx);
+          maxY = Math.max(maxY, el.y + el.height + dy);
+        }
+        const parentId = this.beforeSnapshots[0].parentId;
+        const siblings = this.ctx.document.getChildren(parentId);
+        const excludeIds = new Set(this.beforeSnapshots.map((e) => e.id));
+        let parentBounds = null;
+        if (parentId) {
+          const parent = this.ctx.document.getElement(parentId);
+          if (parent) {
+            parentBounds = { minX: 0, minY: 0, maxX: parent.width, maxY: parent.height };
+          }
+        }
+        const snap = computeSnapAdjust(
+          { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+          siblings,
+          parentBounds,
+          excludeIds,
+          this.ctx.viewport.zoom,
+          gridSnap,
+        );
+        snapDx += snap.dx;
+        snapDy += snap.dy;
+        this.host?.setSnapGuides?.(snap.guides);
+      }
+
       const updated = this.beforeSnapshots.map((el) => ({
         ...el,
-        x: el.x + dx,
-        y: el.y + dy,
+        x: el.x + snapDx,
+        y: el.y + snapDy,
       }));
       this.ctx.updateElementsLive(updated);
       return;
@@ -191,6 +234,7 @@ export class SelectTool implements Tool {
       }
     }
 
+    this.host?.setSnapGuides?.([]);
     this.ctx.setResizingIds(new Set());
     this.mode = null;
     this.activeHandle = null;

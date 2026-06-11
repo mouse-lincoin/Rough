@@ -1,6 +1,6 @@
 import * as Y from 'yjs';
 import { IndexeddbPersistence } from 'y-indexeddb';
-import type { Element, ID, Page, RGBA, RoughDocument } from '@rough/schema';
+import type { Element, ID, Page, RGBA, RoughDocument, Vec2 } from '@rough/schema';
 import { CANVAS_BACKGROUND, createId, generateKeyBetween } from '@rough/shared';
 import { CURRENT_SCHEMA_VERSION } from '@rough/schema';
 import { LOCAL_ORIGIN, PREVIEW_ORIGIN } from './constants.js';
@@ -134,8 +134,92 @@ export class DocumentStore {
   }
 
   setCurrentPageId(pageId: ID): void {
+    if (pageId === this.currentPageId) return;
     this.currentPageId = pageId;
     this.notify();
+  }
+
+  getPageOrder(): ID[] {
+    return this.ydoc.getArray<ID>('pageOrder').toArray();
+  }
+
+  getPages(): Page[] {
+    const doc = this.getDocument();
+    return doc.pageOrder.map((id) => doc.pages[id]).filter(Boolean);
+  }
+
+  addPage(name?: string): ID {
+    const pageId = createId();
+    this.transact(() => {
+      const pages = this.ydoc.getMap('pages');
+      const pageMap = new Y.Map<unknown>();
+      pageMap.set('id', pageId);
+      pageMap.set('name', name ?? `页面 ${pages.size + 1}`);
+      pageMap.set('background', CANVAS_BACKGROUND);
+      pageMap.set('elements', new Y.Map());
+      pages.set(pageId, pageMap);
+      this.ydoc.getArray<ID>('pageOrder').push([pageId]);
+    });
+    return pageId;
+  }
+
+  removePage(pageId: ID): void {
+    const pageOrder = this.ydoc.getArray<ID>('pageOrder');
+    if (pageOrder.length <= 1) return;
+
+    this.transact(() => {
+      const index = pageOrder.toArray().indexOf(pageId);
+      if (index < 0) return;
+      pageOrder.delete(index, 1);
+      this.ydoc.getMap('pages').delete(pageId);
+      this.ydoc.getMap('pageViewports').delete(pageId);
+      if (this.currentPageId === pageId) {
+        this.currentPageId = pageOrder.get(0) as ID;
+      }
+    });
+  }
+
+  renamePage(pageId: ID, name: string): void {
+    this.transact(() => {
+      const pageMap = this.ydoc.getMap('pages').get(pageId) as Y.Map<unknown> | undefined;
+      pageMap?.set('name', name);
+    });
+  }
+
+  reorderPages(pageIds: ID[]): void {
+    this.transact(() => {
+      const pageOrder = this.ydoc.getArray<ID>('pageOrder');
+      pageOrder.delete(0, pageOrder.length);
+      pageOrder.push(pageIds);
+    });
+  }
+
+  getPageViewport(pageId: ID): { offset: Vec2; zoom: number } {
+    const viewports = this.ydoc.getMap('pageViewports');
+    const stored = viewports.get(pageId) as { offset: Vec2; zoom: number } | undefined;
+    return stored ?? { offset: { x: 0, y: 0 }, zoom: 1 };
+  }
+
+  setPageViewport(pageId: ID, viewport: { offset: Vec2; zoom: number }): void {
+    this.transact(() => {
+      this.ydoc.getMap('pageViewports').set(pageId, structuredClone(viewport));
+    }, PREVIEW_ORIGIN);
+  }
+
+  persistPageViewport(pageId: ID, viewport: { offset: Vec2; zoom: number }): void {
+    this.transact(() => {
+      this.ydoc.getMap('pageViewports').set(pageId, structuredClone(viewport));
+    });
+  }
+
+  getSortKeyBetween(beforeId: ID | null, afterId: ID | null, parentId: ID | null): string {
+    const siblings = this.getChildren(parentId);
+    const beforeKey = beforeId ? siblings.find((e) => e.id === beforeId)?.sortKey ?? null : null;
+    const afterKey = afterId ? siblings.find((e) => e.id === afterId)?.sortKey ?? null : null;
+    if (beforeKey && afterKey) return generateKeyBetween(beforeKey, afterKey);
+    if (beforeKey) return generateKeyBetween(beforeKey, null);
+    if (afterKey) return generateKeyBetween(null, afterKey);
+    return generateKeyBetween(null, null);
   }
 
   getPage(): Page {

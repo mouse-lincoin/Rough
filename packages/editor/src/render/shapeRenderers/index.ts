@@ -2,7 +2,9 @@ import type { SceneNode } from '../../scene/SceneNode.js';
 import type { ImageCache } from '../imageCache.js';
 import { renderRectangle } from './rectangle.js';
 import { renderEllipse } from './ellipse.js';
+import { renderPolygon } from './polygon.js';
 import { renderLine } from './line.js';
+import { renderArrow } from './arrow.js';
 import { renderPath } from './path.js';
 import { renderText } from './text.js';
 import { renderImage } from './image.js';
@@ -21,8 +23,14 @@ export function renderShape(
     case 'ellipse':
       renderEllipse(ctx, node, forceClean);
       break;
+    case 'polygon':
+      renderPolygon(ctx, node, forceClean);
+      break;
     case 'line':
       renderLine(ctx, node, forceClean);
+      break;
+    case 'arrow':
+      renderArrow(ctx, node, forceClean);
       break;
     case 'path':
       renderPath(ctx, node, forceClean);
