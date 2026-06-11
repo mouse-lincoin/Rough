@@ -7,6 +7,8 @@ import { RectangleTool } from './tools/RectangleTool.js';
 import { EllipseTool } from './tools/EllipseTool.js';
 import { LineTool } from './tools/LineTool.js';
 import { PenTool } from './tools/PenTool.js';
+import { FrameTool } from './tools/FrameTool.js';
+import { TextTool } from './tools/TextTool.js';
 
 export class ToolManager {
   private tools: Map<ToolName, Tool>;
@@ -22,6 +24,8 @@ export class ToolManager {
       ['ellipse', new EllipseTool(ctx)],
       ['line', new LineTool(ctx)],
       ['pen', new PenTool(ctx)],
+      ['frame', new FrameTool(ctx)],
+      ['text', new TextTool(ctx)],
     ]);
     this._activeTool = this.tools.get('select')!;
   }

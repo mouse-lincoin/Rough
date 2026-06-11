@@ -1,9 +1,15 @@
 import type {
+  AssetRef,
   Element,
   EllipseElement,
+  FrameElement,
+  ID,
+  ImageElement,
   LineElement,
   PathElement,
   RectangleElement,
+  TextElement,
+  Vec2,
 } from '@rough/schema';
 import { DEFAULT_FILL, DEFAULT_STROKE, createId } from '@rough/shared';
 
@@ -11,7 +17,13 @@ export interface ElementDefaults {
   roughness: number;
   roughSeed: number;
   sortKey: string;
+  parentId?: ID | null;
 }
+
+export const FRAME_PRESETS = {
+  mobile: { width: 375, height: 812, preset: 'mobile' as const, name: 'Mobile' },
+  desktop: { width: 1440, height: 900, preset: 'desktop' as const, name: 'Desktop' },
+};
 
 function baseProps(defaults: ElementDefaults): Pick<
   Element,
@@ -32,7 +44,7 @@ function baseProps(defaults: ElementDefaults): Pick<
   return {
     id: createId(),
     name: '',
-    parentId: null,
+    parentId: defaults.parentId ?? null,
     sortKey: defaults.sortKey,
     opacity: 1,
     visible: true,
@@ -138,5 +150,88 @@ export function createPath(points: { x: number; y: number }[], defaults: Element
     rotation: 0,
     points: points.map((p) => ({ x: p.x - minX, y: p.y - minY })),
     fills: [],
+  };
+}
+
+export function createFrame(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  defaults: ElementDefaults,
+  preset: FrameElement['preset'] = 'custom',
+): FrameElement {
+  return {
+    ...baseProps(defaults),
+    type: 'frame',
+    name: preset === 'mobile' ? 'Mobile' : preset === 'desktop' ? 'Desktop' : 'Frame',
+    x,
+    y,
+    width: Math.abs(width),
+    height: Math.abs(height),
+    rotation: 0,
+    fills: [],
+    clipsContent: true,
+    background: null,
+    autoLayout: null,
+    preset,
+  };
+}
+
+export function createText(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  defaults: ElementDefaults,
+  autoSize: TextElement['autoSize'] = 'auto-width',
+): TextElement {
+  return {
+    ...baseProps(defaults),
+    type: 'text',
+    name: '文本',
+    x,
+    y,
+    width: Math.max(width, 1),
+    height: Math.max(height, 24),
+    rotation: 0,
+    text: '',
+    fills: [],
+    strokes: [],
+    textStyle: {
+      fontFamily: 'Inter',
+      fontSize: 16,
+      fontWeight: 400,
+      lineHeight: 1.4,
+      textAlign: 'left',
+      verticalAlign: 'top',
+      color: { r: 26, g: 26, b: 26, a: 1 },
+    },
+    autoSize,
+  };
+}
+
+export function createImage(
+  x: number,
+  y: number,
+  assetRef: AssetRef,
+  naturalSize: Vec2,
+  defaults: ElementDefaults,
+): ImageElement {
+  const scale = Math.min(1, 400 / Math.max(naturalSize.x, naturalSize.y));
+  const w = naturalSize.x * scale;
+  const h = naturalSize.y * scale;
+  return {
+    ...baseProps(defaults),
+    type: 'image',
+    name: '图片',
+    x,
+    y,
+    width: w,
+    height: h,
+    rotation: 0,
+    fills: [],
+    assetId: assetRef.id,
+    naturalSize,
   };
 }

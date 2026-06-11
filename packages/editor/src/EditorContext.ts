@@ -1,9 +1,8 @@
-import type { Element, ID } from '@rough/schema';
-import type { MemoryDocumentStore } from './document/MemoryDocumentStore.js';
+import type { DocumentStore } from '@rough/document';
+import type { Element, ID, TextElement } from '@rough/schema';
 import type { SceneGraph } from './scene/SceneGraph.js';
 import type { SelectionManager } from './interactions/selection.js';
 import type { Viewport } from './render/viewport.js';
-import type { UndoManager } from './undo/UndoManager.js';
 import type { ToolName } from './types.js';
 import type { Command } from './undo/Command.js';
 
@@ -14,15 +13,15 @@ export interface EditorHost {
   getCleanMode(): boolean;
   getResizingIds(): Set<ID>;
   setResizingIds(ids: Set<ID>): void;
+  startTextEditing?(element: TextElement): void;
 }
 
 export class EditorContext {
   constructor(
-    public readonly document: MemoryDocumentStore,
+    public readonly document: DocumentStore,
     public readonly sceneGraph: SceneGraph,
     public readonly selection: SelectionManager,
     public readonly viewport: Viewport,
-    public readonly undo: UndoManager,
     private readonly host: EditorHost,
   ) {}
 
@@ -56,22 +55,33 @@ export class EditorContext {
   }
 
   runCommand(command: Command): void {
-    this.undo.execute(command);
+    command.execute();
     this.rebuildScene();
   }
 
+  /** Live drag preview — updates scene graph only, no Y.Doc write */
   updateElementsLive(elements: Element[]): void {
-    this.document.transact(() => {
-      this.document.setElements(elements);
-    });
-    this.rebuildScene();
+    const merged = { ...this.document.getElements() };
+    for (const el of elements) merged[el.id] = el;
+    this.sceneGraph.rebuild(merged);
+    this.markSceneDirty();
   }
 
-  getElementDefaults(): { roughness: number; roughSeed: number; sortKey: string } {
+  startTextEditing(element: TextElement): void {
+    this.host.startTextEditing?.(element);
+  }
+
+  getElementDefaults(parentId: ID | null = null): {
+    roughness: number;
+    roughSeed: number;
+    sortKey: string;
+    parentId: ID | null;
+  } {
     return {
       roughness: this.getCleanMode() ? 0 : 1,
       roughSeed: Math.floor(Math.random() * 2 ** 31),
-      sortKey: this.document.getNextSortKey(),
+      sortKey: this.document.getNextSortKey(parentId),
+      parentId,
     };
   }
 }

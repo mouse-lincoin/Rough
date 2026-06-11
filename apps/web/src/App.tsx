@@ -1,16 +1,15 @@
-import { CanvasHost } from './components/CanvasHost';
-import { Toolbar } from './components/Toolbar/Toolbar';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { DocumentListPage } from './routes/DocumentListPage';
+import { EditorPage } from './routes/EditorPage';
 
 export function App(): JSX.Element {
   return (
-    <div className="app">
-      <header className="app-header">
-        <span className="app-logo">Rough</span>
-        <Toolbar />
-      </header>
-      <main className="app-main">
-        <CanvasHost />
-      </main>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<DocumentListPage />} />
+        <Route path="/doc/:docId" element={<EditorPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }

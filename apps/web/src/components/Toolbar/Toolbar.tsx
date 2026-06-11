@@ -1,21 +1,27 @@
-import type { ToolName } from '@rough/editor';
+import type { RefObject } from 'react';
+import type { Editor, ToolName } from '@rough/editor';
 import { useEditorStore } from '../../stores/editorStore';
 
 const TOOLS: { name: ToolName; label: string; shortcut: string }[] = [
   { name: 'select', label: '选择', shortcut: 'V' },
   { name: 'hand', label: '抓手', shortcut: 'H' },
+  { name: 'frame', label: 'Frame', shortcut: 'F' },
   { name: 'rectangle', label: '矩形', shortcut: 'R' },
   { name: 'ellipse', label: '椭圆', shortcut: 'O' },
   { name: 'line', label: '直线', shortcut: 'L' },
   { name: 'pen', label: '画笔', shortcut: 'P' },
+  { name: 'text', label: '文本', shortcut: 'T' },
 ];
 
-export function Toolbar(): JSX.Element {
+interface ToolbarProps {
+  editorRef: RefObject<Editor | null>;
+}
+
+export function Toolbar({ editorRef }: ToolbarProps): JSX.Element {
   const activeTool = useEditorStore((s) => s.activeTool);
   const cleanMode = useEditorStore((s) => s.cleanMode);
   const setActiveTool = useEditorStore((s) => s.setActiveTool);
   const setCleanMode = useEditorStore((s) => s.setCleanMode);
-  const editorRef = useEditorStore((s) => s.editorRef);
 
   const handleToolClick = (tool: ToolName): void => {
     editorRef.current?.setTool(tool);

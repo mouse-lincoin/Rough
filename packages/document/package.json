@@ -15,11 +15,14 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "dependencies": {
     "@rough/schema": "workspace:*",
-    "@rough/shared": "workspace:*"
+    "@rough/shared": "workspace:*",
+    "idb": "^8.0.3",
+    "y-indexeddb": "^9.0.12",
+    "yjs": "^13.6.31"
   },
   "devDependencies": {
     "vitest": "^2.1.8"

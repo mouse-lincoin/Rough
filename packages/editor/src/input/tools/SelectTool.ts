@@ -33,6 +33,14 @@ export class SelectTool implements Tool {
     return this.marqueeRect;
   }
 
+  onDoubleClick(e: NormalizedPointerEvent): void {
+    const hit = hitTestPoint(this.ctx.sceneGraph, e.world, this.ctx.viewport.zoom);
+    if (hit?.element.type === 'text') {
+      this.ctx.selection.select([hit.element.id]);
+      this.ctx.startTextEditing(hit.element);
+    }
+  }
+
   onPointerDown(e: NormalizedPointerEvent): void {
     const selected = this.ctx.selection.getIds();
     if (selected.length === 1) {
@@ -178,10 +186,7 @@ export class SelectTool implements Tool {
       });
 
       if (changed && after.length > 0) {
-        for (const before of this.beforeSnapshots) {
-          this.ctx.document.setElement(before);
-        }
-        this.ctx.rebuildScene();
+        this.ctx.sceneGraph.rebuild(this.ctx.document.getElements());
         this.ctx.runCommand(new UpdateElementsCommand(this.ctx.document, after));
       }
     }

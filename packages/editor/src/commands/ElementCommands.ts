@@ -1,10 +1,10 @@
 import type { Element, ID } from '@rough/schema';
-import type { MemoryDocumentStore } from '../document/MemoryDocumentStore.js';
+import type { DocumentStore } from '@rough/document';
 import type { Command } from '../undo/Command.js';
 
 export class AddElementCommand implements Command {
   constructor(
-    private store: MemoryDocumentStore,
+    private store: DocumentStore,
     private element: Element,
   ) {}
 
@@ -21,7 +21,7 @@ export class DeleteElementsCommand implements Command {
   private snapshots: Element[] = [];
 
   constructor(
-    private store: MemoryDocumentStore,
+    private store: DocumentStore,
     private ids: ID[],
   ) {}
 
@@ -42,7 +42,7 @@ export class UpdateElementsCommand implements Command {
   private after: Element[];
 
   constructor(
-    private store: MemoryDocumentStore,
+    private store: DocumentStore,
     after: Element[],
   ) {
     this.after = after.map((e) => structuredClone(e));
@@ -63,22 +63,3 @@ export class UpdateElementsCommand implements Command {
   }
 }
 
-export class ReplaceElementsCommand implements Command {
-  private before: Record<ID, Element> = {};
-
-  constructor(
-    private store: MemoryDocumentStore,
-    private after: Record<ID, Element>,
-  ) {}
-
-  execute(): void {
-    if (Object.keys(this.before).length === 0) {
-      this.before = this.store.cloneElements();
-    }
-    this.store.replaceElements(structuredClone(this.after));
-  }
-
-  undo(): void {
-    this.store.restoreElements(this.before);
-  }
-}

@@ -6,5 +6,5 @@
     "composite": true
   },
   "include": ["src"],
-  "references": [{ "path": "../schema" }, { "path": "../shared" }]
+  "references": [{ "path": "../schema" }, { "path": "../shared" }, { "path": "../document" }]
 }

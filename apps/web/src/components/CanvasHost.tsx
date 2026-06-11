@@ -1,12 +1,18 @@
 import { useEffect, useRef } from 'react';
+import { DocumentStore } from '@rough/document';
 import { Editor } from '@rough/editor';
 import { useEditorStore } from '../stores/editorStore';
 
-export function CanvasHost(): JSX.Element {
+interface CanvasHostProps {
+  docId: string;
+  docName: string;
+  editorRef: React.MutableRefObject<Editor | null>;
+}
+
+export function CanvasHost({ docId, docName, editorRef }: CanvasHostProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const mainCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
-  const editorRef = useEditorStore((s) => s.editorRef);
   const setActiveTool = useEditorStore((s) => s.setActiveTool);
 
   useEffect(() => {
@@ -15,22 +21,35 @@ export function CanvasHost(): JSX.Element {
     const overlayCanvas = overlayCanvasRef.current;
     if (!container || !mainCanvas || !overlayCanvas) return;
 
-    const editor = new Editor({
-      container,
-      mainCanvas,
-      overlayCanvas,
-      callbacks: {
-        onToolChange: setActiveTool,
-      },
-    });
+    let editor: Editor | null = null;
+    let destroyed = false;
 
-    editorRef.current = editor;
+    const init = async (): Promise<void> => {
+      const document = await DocumentStore.load(docId, docName);
+      if (destroyed) {
+        document.destroy();
+        return;
+      }
+
+      editor = new Editor({
+        container,
+        mainCanvas,
+        overlayCanvas,
+        document,
+        callbacks: { onToolChange: setActiveTool },
+      });
+
+      editorRef.current = editor;
+    };
+
+    void init();
 
     return () => {
-      editor.destroy();
+      destroyed = true;
+      editor?.destroy();
       editorRef.current = null;
     };
-  }, [editorRef, setActiveTool]);
+  }, [docId, docName, editorRef, setActiveTool]);
 
   return (
     <div ref={containerRef} className="canvas-host" data-testid="canvas-host">

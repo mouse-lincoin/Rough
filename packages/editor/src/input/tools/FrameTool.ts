@@ -1,77 +1,82 @@
 import type { Element } from '@rough/schema';
-import { createRectangle } from '../../document/elementFactory.js';
+import { createFrame, FRAME_PRESETS } from '../../document/elementFactory.js';
 import type { EditorContext } from '../../EditorContext.js';
 import { AddElementCommand } from '../../commands/ElementCommands.js';
-import { findParentFrameAt, worldToParentLocal } from '../../interactions/parenting.js';
 import type { NormalizedPointerEvent } from '../../types.js';
 import type { Tool } from './BaseTool.js';
 
-export class RectangleTool implements Tool {
-  readonly name = 'rectangle';
+export class FrameTool implements Tool {
+  readonly name = 'frame';
   private start: { x: number; y: number } | null = null;
   private preview: Element | null = null;
-  private parentId: string | null = null;
+  private preset: 'mobile' | 'desktop' | 'custom' = 'custom';
 
   constructor(private ctx: EditorContext) {}
 
   onPointerDown(e: NormalizedPointerEvent): void {
-    this.parentId = findParentFrameAt(this.ctx.sceneGraph, e.world, this.ctx.viewport.zoom);
-    const local = worldToParentLocal(this.ctx.sceneGraph, this.parentId, e.world);
-    this.start = { ...local };
-    const defaults = this.ctx.getElementDefaults(this.parentId);
-    this.preview = createRectangle(local.x, local.y, 1, 1, defaults);
+    this.start = { ...e.world };
+    const defaults = this.ctx.getElementDefaults();
+    if (!e.originalEvent.detail || e.originalEvent.detail === 1) {
+      // wait for drag vs click
+    }
+    this.preview = createFrame(e.world.x, e.world.y, 1, 1, defaults, this.preset);
     this.ctx.document.addElement(this.preview);
     this.ctx.rebuildScene();
   }
 
   onPointerMove(e: NormalizedPointerEvent): void {
     if (!this.start || !this.preview) return;
-    const local = worldToParentLocal(this.ctx.sceneGraph, this.parentId, e.world);
-    let w = local.x - this.start.x;
-    let h = local.y - this.start.y;
+    let w = e.world.x - this.start.x;
+    let h = e.world.y - this.start.y;
     let x = this.start.x;
     let y = this.start.y;
-
-    if (e.shiftKey) {
-      const size = Math.max(Math.abs(w), Math.abs(h));
-      w = w < 0 ? -size : size;
-      h = h < 0 ? -size : size;
+    if (w < 0) {
+      x += w;
+      w = -w;
     }
-    if (e.altKey) {
-      x = this.start.x - w;
-      y = this.start.y - h;
-    } else {
-      if (w < 0) {
-        x = this.start.x + w;
-        w = -w;
-      }
-      if (h < 0) {
-        y = this.start.y + h;
-        h = -h;
-      }
+    if (h < 0) {
+      y += h;
+      h = -h;
     }
-
-    const updated = createRectangle(x, y, w, h, {
+    const updated = createFrame(x, y, w, h, {
       roughness: this.preview.roughness,
       roughSeed: this.preview.roughSeed,
       sortKey: this.preview.sortKey,
-    });
+    }, this.preset);
     updated.id = this.preview.id;
-    updated.name = this.preview.name;
     this.preview = updated;
-    this.ctx.document.setElement(updated);
+    this.ctx.document.setElementPreview(updated);
     this.ctx.rebuildScene();
   }
 
-  onPointerUp(): void {
+  onPointerUp(e: NormalizedPointerEvent): void {
     if (!this.preview) return;
     const el = this.preview;
     this.ctx.document.removeElement(el.id);
-    if (el.width >= 1 && el.height >= 1) {
+
+    const dragDist = this.start
+      ? Math.hypot(e.world.x - this.start.x, e.world.y - this.start.y)
+      : 0;
+
+    if (dragDist < 4) {
+      const preset = FRAME_PRESETS.mobile;
+      const defaults = this.ctx.getElementDefaults();
+      const frame = createFrame(
+        e.world.x,
+        e.world.y,
+        preset.width,
+        preset.height,
+        defaults,
+        preset.preset,
+      );
+      frame.name = preset.name;
+      this.ctx.runCommand(new AddElementCommand(this.ctx.document, frame));
+    } else if (el.width >= 10 && el.height >= 10) {
       this.ctx.runCommand(new AddElementCommand(this.ctx.document, el));
     } else {
       this.ctx.rebuildScene();
     }
+
     this.preview = null;
     this.start = null;
     this.ctx.switchTool('select');
