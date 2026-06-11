@@ -52,6 +52,9 @@ export interface EditorCallbacks {
     elementId: ID | null;
   }) => void;
   onCommentPinClick?: (commentId: ID, screen: Vec2) => void;
+  onCommentAnchorsDegrade?: (
+    updates: Array<{ id: ID; elementId: null; worldX: number; worldY: number }>,
+  ) => void;
 }
 
 export interface ExportContext {

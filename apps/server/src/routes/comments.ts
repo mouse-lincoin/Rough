@@ -59,37 +59,46 @@ export async function registerCommentRoutes(app: FastifyInstance, db: Database):
     return { comment: serializeComment(inserted[0]!) };
   });
 
-  app.patch<{ Params: { id: string }; Body: { body?: string; resolved?: boolean } }>(
-    '/api/v1/comments/:id',
-    async (request, reply) => {
-      const user = requireUser(request, reply);
-      if (!user) return;
+  app.patch<{
+    Params: { id: string };
+    Body: {
+      body?: string;
+      resolved?: boolean;
+      elementId?: string | null;
+      worldX?: number;
+      worldY?: number;
+    };
+  }>('/api/v1/comments/:id', async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return;
 
-      const [existing] = await db.select().from(comments).where(eq(comments.id, request.params.id)).limit(1);
-      if (!existing) {
-        return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Comment not found' } });
-      }
+    const [existing] = await db.select().from(comments).where(eq(comments.id, request.params.id)).limit(1);
+    if (!existing) {
+      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Comment not found' } });
+    }
 
-      const access = await resolveDocumentAccess(db, existing.documentId, user);
-      if (!access || !canWrite(access.mode)) {
-        return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Cannot edit comment' } });
-      }
+    const access = await resolveDocumentAccess(db, existing.documentId, user);
+    if (!access || !canWrite(access.mode)) {
+      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Cannot edit comment' } });
+    }
 
-      const patch: Partial<typeof comments.$inferInsert> = {};
-      if (request.body.body !== undefined) patch.body = request.body.body.trim();
-      if (request.body.resolved !== undefined) {
-        patch.resolvedAt = request.body.resolved ? new Date() : null;
-      }
+    const patch: Partial<typeof comments.$inferInsert> = {};
+    if (request.body.body !== undefined) patch.body = request.body.body.trim();
+    if (request.body.resolved !== undefined) {
+      patch.resolvedAt = request.body.resolved ? new Date() : null;
+    }
+    if (request.body.elementId !== undefined) patch.elementId = request.body.elementId;
+    if (request.body.worldX !== undefined) patch.worldX = request.body.worldX;
+    if (request.body.worldY !== undefined) patch.worldY = request.body.worldY;
 
-      const updated = await db
-        .update(comments)
-        .set(patch)
-        .where(eq(comments.id, request.params.id))
-        .returning();
+    const updated = await db
+      .update(comments)
+      .set(patch)
+      .where(eq(comments.id, request.params.id))
+      .returning();
 
-      return { comment: serializeComment(updated[0]!) };
-    },
-  );
+    return { comment: serializeComment(updated[0]!) };
+  });
 
   app.delete<{ Params: { id: string } }>('/api/v1/comments/:id', async (request, reply) => {
     const user = requireUser(request, reply);

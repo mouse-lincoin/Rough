@@ -90,6 +90,7 @@ export class DocumentStore {
 
     const store = new DocumentStore(ydoc, documentId, pageId);
     store.persistence = persistence;
+    store.applySchemaMigrations();
     return store;
   }
 
@@ -370,6 +371,14 @@ export class DocumentStore {
     this.transact(() => {
       this.ydoc.getMap('components').delete(id);
     }, origin);
+  }
+
+  applySchemaMigrations(): void {
+    const meta = this.ydoc.getMap('meta');
+    const version = (meta.get('schemaVersion') as number) ?? 0;
+    if (version >= CURRENT_SCHEMA_VERSION) return;
+    const migrated = migrateDocument(this.getDocument());
+    this.replaceFromRoughDocument(migrated);
   }
 
   replaceFromRoughDocument(doc: RoughDocument): void {

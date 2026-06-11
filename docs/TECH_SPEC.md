@@ -940,8 +940,8 @@ WS     /collab/:documentId?token=   # Hocuspocus
 
 | 模块 | 状态 |
 | --- | --- |
-| 画布内核(渲染/视口/工具/命中/变换)§6-§7 | ✅ 达标(细节差距见 B.2) |
-| 文档层(Yjs/撤销/本地持久化)§5、§8.9、§11 | ✅ 达标 |
+| 画布内核(渲染/视口/工具/命中/变换)§6-§7 | ✅ 达标(P0 reparent/评论放置已修) |
+| 文档层(Yjs/撤销/本地持久化)§5、§8.9、§11 | ✅ 达标(load 时 schema 迁移已接) |
 | 图层/属性/页面面板 §8.1-§8.3 | ✅ 主干达标(属性面板部分分区缩水) |
 | 箭头绑定 §8.4、编组/Frame 嵌套 §8.5 | ✅ 主干达标 |
 | Auto Layout §8.6 | ⚠️ 求解器正确,交互与 justifyContent 有缺口 |
@@ -949,7 +949,7 @@ WS     /collab/:documentId?token=   # Hocuspocus
 | 导出 §8.11 | ✅ 五格式齐全(SVG 覆盖部分图形) |
 | 协作 §9 | ✅ 主编辑器已接入(光标插值/跟随模式未做) |
 | 后端 §10 | ✅ REST/DB/S3 齐全(前端走 DEV_AUTH 开发登录) |
-| 评论 §8.10 | ✅ 锚点/浮层/跳转已接通(退化逻辑有 bug,见 B.2) |
+| 评论 §8.10 | ✅ 锚点/浮层/跳转已接通(删除元素退化已修;遗留孤儿 elementId 仍可能跳位) |
 
 ### B.2 已知差距清单(按优先级)
 
@@ -957,10 +957,10 @@ WS     /collab/:documentId?token=   # Hocuspocus
 
 | # | P | 模块 | 待办 | 规格 | 关键入口 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | P0 | 评论 | 元素删除后锚点退化:DB 局部坐标被当世界坐标回退渲染 | §8.10 | `commentAnchors.ts`, `CommentsLayer.tsx` |
-| 2 | P0 | 变换/图层 | 旋转元素 reparent 未考虑绕中心旋转,跨容器移动跳位 | §8.1/§8.5 | `treeCommands.ts`, `LayerPanel.tsx` |
-| 3 | P0 | 评论 | `C` 工具绑定当前选中元素,非点击处 hitTest | §7.2 | `Editor.ts` `placeComment`, `CommentTool.ts` |
-| 4 | P0 | 持久化 | `DocumentStore.load` 不执行 schema 迁移,`migrations` 为空 | §11 | `version.ts`, `DocumentStore.ts` |
+| ~~1~~ | ~~P0~~ | 评论 | ~~元素删除后锚点退化~~ ✅ 已修:删除元素时 `computeAnchorDegradations` 转世界坐标并 PATCH | §8.10 | `commentAnchors.ts`, `Editor.ts`, `CommentsLayer.tsx` |
+| ~~2~~ | ~~P0~~ | 变换/图层 | ~~旋转 reparent 跳位~~ ✅ 已修:按世界中心换算新 parent 局部坐标 | §8.1/§8.5 | `treeCommands.ts` |
+| ~~3~~ | ~~P0~~ | 评论 | ~~`C` 工具绑定选中元素~~ ✅ 已修:点击处 `hitTestPoint` | §7.2 | `Editor.ts` `placeComment` |
+| ~~4~~ | ~~P0~~ | 持久化 | ~~load 不跑迁移~~ ✅ 已修:`applySchemaMigrations` + v0→v1 迁移 | §11 | `version.ts`, `DocumentStore.ts` |
 | 5 | P1 | 渲染/属性 | `Effect`(drop-shadow / layer-blur)数据模型有,渲染与面板未接 | §5.2/§8.2 | `Renderer.ts`, `PropertiesPanel.tsx` |
 | 6 | P1 | 箭头 | `label` 未渲染;`orthogonal` 路由未做;吸附无目标高亮 | §8.4 | `arrow.ts`, `ArrowTool.ts` |
 | 7 | P1 | 吸附 | 等间距检测与间距标注未做;resize 过程不吸附 | §7.5 | `snapping.ts`, `SelectTool.ts` |
@@ -975,14 +975,14 @@ WS     /collab/:documentId?token=   # Hocuspocus
 | 16 | P2 | 后端 | GitHub OAuth 回调页未做;快照无 50 版历史;compose 缺 web;WS 独立端口 | §9.1/§10 | `apps/server/`, `docker-compose.yml` |
 | 17 | P2 | 测试 | E2E 经 `__ROUGH_E2E__` 桥,未覆盖真实键鼠;无性能回归自动化 | §12/§13 | `e2eBridge.ts`, `e2e/tests/` |
 
-**建议迭代顺序**:P0 #1–#4(正确性) → P1 #5–#9(核心编辑体验) → P1 #10–#13(布局/组件/导出) → P2 #14–#17(协作/工程)。
+**建议迭代顺序**:~~P0 #1–#4~~ ✅ 已完成 → P1 #5–#9(核心编辑体验) → P1 #10–#13(布局/组件/导出) → P2 #14–#17(协作/工程)。
 
 #### 正确性问题(P0)
 
-1. 评论锚点退化:绑定元素被删除后,DB 中存的元素局部坐标被当作世界坐标回退渲染,锚点会跳位(§8.10 要求退化为 worldPos)。
-2. 旋转元素跨容器移动:reparent 坐标换算未考虑绕中心旋转,旋转非 0 的元素拖入/拖出 Frame 或图层面板跨容器移动时会跳位(§8.1/§8.5)。
-3. 评论放置:`C` 工具绑定的是当前选中元素而非点击处 hitTest 结果(§7.2)。
-4. schema 迁移链:框架存在但 `DocumentStore.load` 不执行迁移,`migrations` 为空(§11);schemaVersion 升级前必须补上。
+1. ~~评论锚点退化~~ ✅ **已修(v1.1.1)**:删除元素前用 `computeAnchorDegradations` 将局部锚点转为世界坐标、`elementId` 置空并 PATCH 持久化。
+2. ~~旋转元素跨容器移动~~ ✅ **已修(v1.1.1)**:reparent 时保持世界中心不变,按 `center - w/2/h/2` 写回新 parent 局部 `x/y`。
+3. ~~评论放置~~ ✅ **已修(v1.1.1)**:`placeComment` 用点击处 `hitTestPoint` 绑定元素,不再依赖当前选中集。
+4. ~~schema 迁移链~~ ✅ **已修(v1.1.1)**:`DocumentStore.load` 调用 `applySchemaMigrations`;注册 v0→v1 迁移函数。
 
 #### 功能缺口(P1)
 

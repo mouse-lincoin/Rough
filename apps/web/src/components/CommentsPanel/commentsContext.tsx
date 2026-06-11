@@ -8,10 +8,12 @@ import {
   type ReactNode,
 } from 'react';
 import type { Editor } from '@rough/editor';
+import type { CommentAnchorDegrade } from '@rough/editor';
 import {
   createComment,
   fetchComments,
   resolveComment,
+  updateCommentAnchor,
   type ApiComment,
 } from '../../api/client';
 import { useEditorStore } from '../../stores/editorStore';
@@ -43,6 +45,7 @@ interface CommentsContextValue {
   submitComment: (body: string, parentId?: string | null) => Promise<void>;
   resolveThread: (commentId: string) => Promise<void>;
   getThread: (rootId: string) => ApiComment[];
+  degradeAnchors: (updates: CommentAnchorDegrade[]) => Promise<void>;
 }
 
 const CommentsContext = createContext<CommentsContextValue | null>(null);
@@ -178,6 +181,24 @@ export function CommentsProvider({
     [closeThread, notifyChange, reload],
   );
 
+  const degradeAnchors = useCallback(
+    async (updates: CommentAnchorDegrade[]) => {
+      if (!cloudEnabled || updates.length === 0) return;
+      await Promise.all(
+        updates.map((u) =>
+          updateCommentAnchor(u.id, {
+            elementId: null,
+            worldX: u.worldX,
+            worldY: u.worldY,
+          }),
+        ),
+      );
+      await reload();
+      notifyChange('updated');
+    },
+    [cloudEnabled, notifyChange, reload],
+  );
+
   const getThread = useCallback(
     (rootId: string): ApiComment[] => {
       const root = comments.find((c) => c.id === rootId);
@@ -211,6 +232,7 @@ export function CommentsProvider({
       submitComment,
       resolveThread,
       getThread,
+      degradeAnchors,
     }),
     [
       cloudEnabled,
@@ -230,6 +252,7 @@ export function CommentsProvider({
       submitComment,
       resolveThread,
       getThread,
+      degradeAnchors,
     ],
   );
 

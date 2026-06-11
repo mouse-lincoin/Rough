@@ -146,6 +146,21 @@ export async function resolveComment(commentId: string, resolved: boolean): Prom
   return data.comment;
 }
 
+export async function updateCommentAnchor(
+  commentId: string,
+  anchor: {
+    elementId: string | null;
+    worldX: number;
+    worldY: number;
+  },
+): Promise<ApiComment> {
+  const data = await request<{ comment: ApiComment }>(`/api/v1/comments/${commentId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(anchor),
+  });
+  return data.comment;
+}
+
 export function collabTokenForShare(shareToken: string): string {
   return `share:${shareToken}`;
 }

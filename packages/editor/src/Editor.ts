@@ -26,12 +26,16 @@ import {
 import { getAssetBlob, saveDocumentThumbnail } from '@rough/document';
 import { capturePageThumbnail } from './export/thumbnailCapture.js';
 import type { CommentPin, ExportContext, EditorCallbacks, ToolName } from './types.js';
-import { resolveCommentAnchorWorld, worldToElementLocal } from './comments/commentAnchors.js';
+import {
+  computeAnchorDegradations,
+  resolveCommentAnchorWorld,
+  worldToElementLocal,
+} from './comments/commentAnchors.js';
 import { renderRootsToPngBlobs } from './export/offscreenRender.js';
 import { AwarenessSync, type RemotePeer } from './collab/AwarenessSync.js';
 import type { CollabOptions } from '@rough/document';
 import type { SnapGuide } from './interactions/snapping.js';
-import { findDeepestContainerAtPoint } from './interactions/hitTest.js';
+import { findDeepestContainerAtPoint, hitTestPoint } from './interactions/hitTest.js';
 import { canReparentTo, getSelectionRoots } from './interactions/treeUtils.js';
 import { collectSubtree } from './clipboard/clipboard.js';
 import {
@@ -108,6 +112,8 @@ export class Editor implements EditorHost {
   private thumbnailTimer: ReturnType<typeof setTimeout> | null = null;
   private commentPins: CommentPin[] = [];
   private highlightedCommentId: ID | null = null;
+  private lastElementIds = new Set<ID>();
+  private commentAnchorsDegradeHandler: EditorCallbacks['onCommentAnchorsDegrade'] | null = null;
 
   constructor(options: EditorOptions) {
     this.callbacks = options.callbacks ?? {};
@@ -136,7 +142,30 @@ export class Editor implements EditorHost {
     });
 
     this.document.subscribe(() => {
-      this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
+      const elements = this.document.getElements();
+      const currentIds = new Set(Object.keys(elements));
+      const deletedIds = [...this.lastElementIds].filter((id) => !currentIds.has(id));
+
+      if (deletedIds.length > 0 && this.commentPins.length > 0) {
+        const degradations = computeAnchorDegradations(
+          this.sceneGraph,
+          this.commentPins,
+          new Set(deletedIds),
+        );
+        if (degradations.length > 0) {
+          this.commentPins = this.commentPins.map((pin) => {
+            const degraded = degradations.find((d) => d.id === pin.id);
+            return degraded
+              ? { ...pin, elementId: null, worldX: degraded.worldX, worldY: degraded.worldY }
+              : pin;
+          });
+          this.commentAnchorsDegradeHandler?.(degradations);
+          this.callbacks.onCommentAnchorsDegrade?.(degradations);
+        }
+      }
+
+      this.sceneGraph.rebuild(elements, this.document.getComponents());
+      this.lastElementIds = currentIds;
       refreshBoundArrows(this.ctx);
       this.markSceneDirty();
       this.callbacks.onDocumentChange?.();
@@ -144,6 +173,7 @@ export class Editor implements EditorHost {
     });
 
     this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
+    this.lastElementIds = new Set(Object.keys(this.document.getElements()));
     this.setupCanvases(options);
     this.input = new InputPipeline(
       options.container,
@@ -728,7 +758,13 @@ export class Editor implements EditorHost {
   }
 
   placeComment(worldX: number, worldY: number): void {
-    const elementId = [...this.selection.selectedIds][0] ?? null;
+    const hit = hitTestPoint(
+      this.sceneGraph,
+      { x: worldX, y: worldY },
+      this.viewport.zoom,
+      this.deepInstanceId,
+    );
+    const elementId = hit?.element.id ?? null;
     let anchorX = worldX;
     let anchorY = worldY;
     if (elementId) {
@@ -749,6 +785,12 @@ export class Editor implements EditorHost {
   setCommentPins(pins: CommentPin[]): void {
     this.commentPins = pins;
     this.requestRender();
+  }
+
+  setCommentAnchorsDegradeHandler(
+    handler: EditorCallbacks['onCommentAnchorsDegrade'] | undefined,
+  ): void {
+    this.commentAnchorsDegradeHandler = handler ?? null;
   }
 
   setHighlightedCommentId(commentId: ID | null): void {
