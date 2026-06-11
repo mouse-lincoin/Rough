@@ -7,7 +7,7 @@ import {
   componentsFromYDoc,
 } from './componentMapping.js';
 import { CANVAS_BACKGROUND, createId, generateKeyBetween } from '@rough/shared';
-import { CURRENT_SCHEMA_VERSION } from '@rough/schema';
+import { CURRENT_SCHEMA_VERSION, migrateDocument } from '@rough/schema';
 import { LOCAL_ORIGIN, PREVIEW_ORIGIN } from './constants.js';
 import { DocumentUndoManager } from './undo.js';
 import {
@@ -363,6 +363,52 @@ export class DocumentStore {
     this.transact(() => {
       this.ydoc.getMap('components').delete(id);
     }, origin);
+  }
+
+  replaceFromRoughDocument(doc: RoughDocument): void {
+    const migrated = migrateDocument(doc);
+    this.transact(() => {
+      const meta = this.ydoc.getMap('meta');
+      meta.set('name', migrated.name);
+      meta.set('schemaVersion', migrated.schemaVersion);
+      meta.set('id', migrated.id);
+
+      const pages = this.ydoc.getMap('pages');
+      pages.forEach((_, key) => pages.delete(key));
+
+      for (const pageId of migrated.pageOrder) {
+        const page = migrated.pages[pageId];
+        if (!page) continue;
+        const pageMap = new Y.Map<unknown>();
+        pageMap.set('id', pageId);
+        pageMap.set('name', page.name);
+        pageMap.set('background', structuredClone(page.background));
+        const elementsMap = new Y.Map<Y.Map<unknown>>();
+        for (const el of Object.values(page.elements)) {
+          elementsMap.set(el.id, elementToYMap(el));
+        }
+        pageMap.set('elements', elementsMap);
+        pages.set(pageId, pageMap);
+      }
+
+      const pageOrder = this.ydoc.getArray<ID>('pageOrder');
+      pageOrder.delete(0, pageOrder.length);
+      pageOrder.push(migrated.pageOrder);
+
+      const components = this.ydoc.getMap('components');
+      components.forEach((_, key) => components.delete(key));
+      for (const def of Object.values(migrated.components)) {
+        components.set(def.id, componentToYMap(def));
+      }
+
+      const assets = this.ydoc.getMap('assets');
+      assets.forEach((_, key) => assets.delete(key));
+      for (const [assetId, ref] of Object.entries(migrated.assets)) {
+        assets.set(assetId, structuredClone(ref));
+      }
+
+      this.currentPageId = migrated.pageOrder[0] ?? this.currentPageId;
+    });
   }
 
   destroy(): void {

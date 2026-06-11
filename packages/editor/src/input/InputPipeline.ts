@@ -291,7 +291,7 @@ export class InputPipeline {
 
     if (mod && e.key === 'e') {
       e.preventDefault();
-      console.info('导出 (Phase 5)');
+      this.editor.requestExport();
       return;
     }
 

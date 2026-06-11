@@ -32,6 +32,13 @@ export interface EditorCallbacks {
   onDocumentChange?: () => void;
   onPageChange?: (pageId: ID) => void;
   onPanelsToggle?: (visible: boolean) => void;
+  onExportRequest?: () => void;
+}
+
+export interface ExportContext {
+  pageId: ID;
+  selectionIds: ID[];
+  exportTargetIds: ID[];
 }
 
 export interface Rect {

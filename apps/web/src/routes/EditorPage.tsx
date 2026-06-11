@@ -8,6 +8,7 @@ import { LayerPanel } from '../components/LayerPanel/LayerPanel';
 import { PropertiesPanel } from '../components/PropertiesPanel/PropertiesPanel';
 import { PagesPanel } from '../components/PagesPanel/PagesPanel';
 import { ComponentsPanel } from '../components/ComponentsPanel/ComponentsPanel';
+import { ExportDialog } from '../components/ExportDialog/ExportDialog';
 import { useEditorStore } from '../stores/editorStore';
 
 export function EditorPage(): JSX.Element {
@@ -16,6 +17,7 @@ export function EditorPage(): JSX.Element {
   const editorRef = useRef<Editor | null>(null);
   const [docName, setDocName] = useState('未命名');
   const [metaReady, setMetaReady] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const panelsVisible = useEditorStore((s) => s.panelsVisible);
 
   useEffect(() => {
@@ -45,6 +47,17 @@ export function EditorPage(): JSX.Element {
   const handlePaste = (e: React.ClipboardEvent): void => {
     const items = e.clipboardData?.items;
     if (!items || !editorRef.current) return;
+
+    const jsonText = e.clipboardData?.getData('text/plain');
+    if (jsonText?.trimStart().startsWith('{') && jsonText.includes('"schemaVersion"')) {
+      try {
+        e.preventDefault();
+        editorRef.current.importJson(jsonText);
+        return;
+      } catch {
+        // fall through to other paste handlers
+      }
+    }
 
     const roughItem = Array.from(items).find((item) =>
       item.type === 'application/x-rough+json',
@@ -106,7 +119,12 @@ export function EditorPage(): JSX.Element {
           </aside>
         )}
         <main className="app-main">
-          <CanvasHost docId={docId} docName={docName} editorRef={editorRef} />
+          <CanvasHost
+            docId={docId}
+            docName={docName}
+            editorRef={editorRef}
+            onExportRequest={() => setExportOpen(true)}
+          />
         </main>
         {panelsVisible && (
           <aside className="editor-sidebar editor-sidebar-right">
@@ -114,6 +132,12 @@ export function EditorPage(): JSX.Element {
           </aside>
         )}
       </div>
+      <ExportDialog
+        open={exportOpen}
+        editorRef={editorRef}
+        docName={docName}
+        onClose={() => setExportOpen(false)}
+      />
     </div>
   );
 }
