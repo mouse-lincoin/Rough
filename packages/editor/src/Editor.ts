@@ -1,35 +1,41 @@
+import type { DocumentStore } from '@rough/document';
+import { storeAssetBlob } from '@rough/document';
 import type { ID } from '@rough/schema';
-import { MemoryDocumentStore } from './document/MemoryDocumentStore.js';
+import { AddElementCommand } from './commands/ElementCommands.js';
+import { createImage } from './document/elementFactory.js';
 import { SceneGraph } from './scene/SceneGraph.js';
 import { SelectionManager } from './interactions/selection.js';
 import { Viewport } from './render/viewport.js';
 import { Renderer } from './render/Renderer.js';
 import { OverlayRenderer } from './render/overlay.js';
-import { UndoManager } from './undo/UndoManager.js';
 import { EditorContext, type EditorHost } from './EditorContext.js';
 import { ToolManager } from './input/ToolManager.js';
 import { InputPipeline } from './input/InputPipeline.js';
+import { TextEditorOverlay } from './text/textEditorOverlay.js';
+import { ImageCache } from './render/imageCache.js';
 import type { EditorCallbacks, ToolName } from './types.js';
 
 export interface EditorOptions {
   container: HTMLElement;
   mainCanvas: HTMLCanvasElement;
   overlayCanvas: HTMLCanvasElement;
+  document: DocumentStore;
   callbacks?: EditorCallbacks;
 }
 
 export class Editor implements EditorHost {
-  readonly document = new MemoryDocumentStore();
+  readonly document: DocumentStore;
   readonly sceneGraph = new SceneGraph();
   readonly selection = new SelectionManager();
   readonly viewport = new Viewport();
-  readonly undo = new UndoManager();
+  readonly imageCache = new ImageCache();
 
   private renderer = new Renderer();
   private overlayRenderer = new OverlayRenderer();
   private ctx: EditorContext;
   private tools: ToolManager;
   private input: InputPipeline | null = null;
+  private textEditor: TextEditorOverlay;
 
   private sceneDirty = true;
   private viewportDirty = true;
@@ -40,20 +46,24 @@ export class Editor implements EditorHost {
   private height = 0;
 
   private callbacks: EditorCallbacks;
+  private mainCanvas: HTMLCanvasElement;
+  private overlayCanvas: HTMLCanvasElement;
 
   constructor(options: EditorOptions) {
     this.callbacks = options.callbacks ?? {};
     this.mainCanvas = options.mainCanvas;
     this.overlayCanvas = options.overlayCanvas;
+    this.document = options.document;
+
     this.ctx = new EditorContext(
       this.document,
       this.sceneGraph,
       this.selection,
       this.viewport,
-      this.undo,
       this,
     );
     this.tools = new ToolManager(this.ctx);
+    this.textEditor = new TextEditorOverlay(options.container, this.ctx, this.viewport);
 
     this.selection.subscribe((ids) => {
       this.callbacks.onSelectionChange?.(ids);
@@ -77,6 +87,14 @@ export class Editor implements EditorHost {
       },
     );
     this.startLoop();
+  }
+
+  static async create(
+    options: Omit<EditorOptions, 'document'> & { document?: DocumentStore },
+  ): Promise<Editor> {
+    const document = options.document ?? (await import('@rough/document')).DocumentStore.createNew();
+    await document.bindPersistence();
+    return new Editor({ ...options, document });
   }
 
   private setupCanvases(options: EditorOptions): void {
@@ -133,6 +151,7 @@ export class Editor implements EditorHost {
       page.background,
       this.cleanMode,
       this.resizingIds,
+      this.imageCache,
     );
   }
 
@@ -150,9 +169,6 @@ export class Editor implements EditorHost {
       transformHandle: null,
     });
   }
-
-  private mainCanvas: HTMLCanvasElement;
-  private overlayCanvas: HTMLCanvasElement;
 
   requestRender(): void {
     this.renderOverlay();
@@ -193,10 +209,39 @@ export class Editor implements EditorHost {
     this.switchTool(tool);
   }
 
+  startTextEditing(element: import('@rough/schema').TextElement): void {
+    this.textEditor.startEditing(element);
+  }
+
+  getContext(): EditorContext {
+    return this.ctx;
+  }
+
+  async importImage(file: File, worldX: number, worldY: number): Promise<void> {
+    const bitmap = await createImageBitmap(file);
+    const ref = await storeAssetBlob(
+      this.document.getDocumentId(),
+      file,
+      file.type,
+      bitmap.width,
+      bitmap.height,
+    );
+    bitmap.close();
+    this.document.addAssetRef(ref);
+
+    const defaults = this.ctx.getElementDefaults();
+    const el = createImage(worldX, worldY, ref, { x: ref.width, y: ref.height }, defaults);
+    this.ctx.runCommand(new AddElementCommand(this.document, el));
+    void this.imageCache.load(ref.id);
+    this.markSceneDirty();
+  }
+
   destroy(): void {
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
     }
     this.input?.destroy();
+    this.textEditor.destroy();
+    this.document.destroy();
   }
 }

@@ -6,6 +6,8 @@ export class InputPipeline {
   private spaceHeld = false;
   private tempHand = false;
   private pointerDown = false;
+  private lastClickTime = 0;
+  private lastClickWorld = { x: 0, y: 0 };
 
   constructor(
     _container: HTMLElement,
@@ -62,9 +64,22 @@ export class InputPipeline {
 
   private onPointerDown = (e: PointerEvent): void => {
     if (e.button !== 0) return;
+    const normalized = this.normalize(e);
+    const now = Date.now();
+    const isDoubleClick =
+      now - this.lastClickTime < 300 &&
+      Math.hypot(normalized.world.x - this.lastClickWorld.x, normalized.world.y - this.lastClickWorld.y) < 5;
+    this.lastClickTime = now;
+    this.lastClickWorld = normalized.world;
+
+    if (isDoubleClick && this.tools.activeTool.name === 'select') {
+      this.tools.selectTool.onDoubleClick(normalized);
+      return;
+    }
+
     this.pointerDown = true;
     this.canvas.setPointerCapture(e.pointerId);
-    this.getEffectiveTool().onPointerDown(this.normalize(e));
+    this.getEffectiveTool().onPointerDown(normalized);
   };
 
   private onPointerMove = (e: PointerEvent): void => {
@@ -111,7 +126,7 @@ export class InputPipeline {
 
     if (mod && e.key === 'z' && !e.shiftKey) {
       e.preventDefault();
-      if (this.ctx.undo.undo()) {
+      if (this.ctx.document.undo.undo()) {
         this.ctx.rebuildScene();
         this.ctx.requestRender();
       }
@@ -120,7 +135,7 @@ export class InputPipeline {
 
     if (mod && (e.key === 'Z' || (e.key === 'z' && e.shiftKey))) {
       e.preventDefault();
-      if (this.ctx.undo.redo()) {
+      if (this.ctx.document.undo.redo()) {
         this.ctx.rebuildScene();
         this.ctx.requestRender();
       }
@@ -141,6 +156,10 @@ export class InputPipeline {
       L: 'line',
       p: 'pen',
       P: 'pen',
+      f: 'frame',
+      F: 'frame',
+      t: 'text',
+      T: 'text',
     };
 
     if (!mod && toolKeys[e.key]) {

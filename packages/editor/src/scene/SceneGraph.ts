@@ -78,8 +78,8 @@ export class SceneGraph {
         return cmp !== 0 ? cmp : b.element.id.localeCompare(a.element.id);
       });
       for (const node of sorted) {
-        yield node;
         yield* walk(node.children);
+        yield node;
       }
     };
     yield* walk(this.roots);

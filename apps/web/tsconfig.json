@@ -9,6 +9,7 @@
   "references": [
     { "path": "../../packages/schema" },
     { "path": "../../packages/shared" },
+    { "path": "../../packages/document" },
     { "path": "../../packages/editor" }
   ]
 }

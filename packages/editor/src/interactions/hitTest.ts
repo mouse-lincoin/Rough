@@ -51,6 +51,23 @@ function hitTestLocalPoint(element: Element, local: Vec2, zoom: number): boolean
       }
       return false;
     }
+    case 'frame':
+    case 'image': {
+      return (
+        local.x >= 0 &&
+        local.x <= element.width &&
+        local.y >= 0 &&
+        local.y <= element.height
+      );
+    }
+    case 'text': {
+      return (
+        local.x >= 0 &&
+        local.x <= element.width &&
+        local.y >= 0 &&
+        local.y <= element.height
+      );
+    }
     default:
       return false;
   }

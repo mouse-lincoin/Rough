@@ -1,2 +1,14 @@
-// Phase 2: DocumentStore, Y.Doc mapping, fractional index, undo
-export const DOCUMENT_PACKAGE_READY = true;
+export { DocumentStore } from './DocumentStore.js';
+export { DocumentUndoManager } from './undo.js';
+export { LOCAL_ORIGIN, PREVIEW_ORIGIN } from './constants.js';
+export { elementToYMap, yMapToElement, applyElementToYMap } from './yjsMapping.js';
+export {
+  listDocuments,
+  getDocumentMeta,
+  createDocumentMeta,
+  updateDocumentMeta,
+  deleteDocumentMeta,
+  touchDocumentMeta,
+  type DocumentMeta,
+} from './metaStore.js';
+export { storeAssetBlob, getAssetBlob, deleteDocumentAssets } from './assetStore.js';

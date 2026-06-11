@@ -3,10 +3,12 @@ import type { ID, Vec2 } from '@rough/schema';
 export type ToolName =
   | 'select'
   | 'hand'
+  | 'frame'
   | 'rectangle'
   | 'ellipse'
   | 'line'
-  | 'pen';
+  | 'pen'
+  | 'text';
 
 export interface NormalizedPointerEvent {
   type: 'pointerdown' | 'pointermove' | 'pointerup';
