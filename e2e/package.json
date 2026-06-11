@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "echo 'Run e2e via: pnpm --filter @rough/e2e exec playwright test' && exit 0",
+    "test": "playwright test",
     "lint": "echo 'No lint for e2e yet' && exit 0",
     "build": "echo 'No build for e2e' && exit 0",
     "typecheck": "echo 'No typecheck for e2e' && exit 0"
   },
   "devDependencies": {
+    "@hocuspocus/server": "^2.15.0",
     "@playwright/test": "^1.49.1"
   }
 }

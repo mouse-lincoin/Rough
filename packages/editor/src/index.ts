@@ -9,6 +9,12 @@ export { ROUGH_CLIPBOARD_MIME } from './clipboard/clipboard.js';
 export type { AlignType } from './interactions/align.js';
 export { solveLayout, applyLayoutToDocument } from './layout/autoLayout.js';
 export { parseShadowId, shadowId } from './components/instanceExpansion.js';
+export { AddElementCommand, UpdateElementsCommand } from './commands/ElementCommands.js';
+export {
+  createRectangle,
+  createFrame,
+  createArrow,
+} from './document/elementFactory.js';
 export {
   CreateComponentCommand,
   InstantiateComponentCommand,

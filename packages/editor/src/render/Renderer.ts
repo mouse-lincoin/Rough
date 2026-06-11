@@ -46,7 +46,7 @@ export class Renderer {
     for (const root of sortedRoots) {
       const worldAABB = getWorldAABB(root);
       if (!aabbIntersects(worldAABB, viewAABB)) continue;
-      this.renderNodeTree(ctx, root, viewport, forceClean, resizingIds, imageCache);
+      this.renderNodeTree(ctx, root, viewport, viewAABB, forceClean, resizingIds, imageCache);
     }
 
     ctx.restore();
@@ -56,12 +56,16 @@ export class Renderer {
     ctx: CanvasRenderingContext2D,
     node: SceneNode,
     viewport: Viewport,
+    viewAABB: { minX: number; minY: number; maxX: number; maxY: number },
     forceClean: boolean,
     resizingIds: Set<string>,
     imageCache: ImageCache,
   ): void {
     const el = node.element;
     if (!el.visible) return;
+
+    const nodeAABB = getWorldAABB(node);
+    if (!aabbIntersects(nodeAABB, viewAABB)) return;
 
     ctx.save();
     ctx.globalAlpha = el.opacity;
@@ -77,7 +81,7 @@ export class Renderer {
         return cmp !== 0 ? cmp : a.element.id.localeCompare(b.element.id);
       });
       for (const child of sortedChildren) {
-        this.renderNodeTree(ctx, child, viewport, forceClean, resizingIds, imageCache);
+        this.renderNodeTree(ctx, child, viewport, viewAABB, forceClean, resizingIds, imageCache);
       }
       ctx.restore();
       return;
@@ -96,7 +100,7 @@ export class Renderer {
         return cmp !== 0 ? cmp : a.element.id.localeCompare(b.element.id);
       });
       for (const child of sortedChildren) {
-        this.renderNodeTree(ctx, child, viewport, forceClean, resizingIds, imageCache);
+        this.renderNodeTree(ctx, child, viewport, viewAABB, forceClean, resizingIds, imageCache);
       }
       ctx.restore();
       renderFrameLabel(ctx, node, viewport.zoom);
@@ -111,7 +115,7 @@ export class Renderer {
       return cmp !== 0 ? cmp : a.element.id.localeCompare(b.element.id);
     });
     for (const child of sortedChildren) {
-      this.renderNodeTree(ctx, child, viewport, forceClean, resizingIds, imageCache);
+      this.renderNodeTree(ctx, child, viewport, viewAABB, forceClean, resizingIds, imageCache);
     }
   }
 }

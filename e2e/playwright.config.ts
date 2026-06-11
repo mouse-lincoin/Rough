@@ -12,10 +12,22 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  webServer: {
-    command: 'pnpm --filter @rough/web build && pnpm --filter @rough/web preview --host 127.0.0.1 --port 4173',
-    url: 'http://127.0.0.1:4173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      command: 'node ./collab-server.mjs',
+      port: 3099,
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+    {
+      command:
+        'VITE_COLLAB_URL=ws://127.0.0.1:3099 pnpm --filter @rough/web build && pnpm --filter @rough/web preview --host 127.0.0.1 --port 4173',
+      url: 'http://127.0.0.1:4173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      env: {
+        VITE_COLLAB_URL: 'ws://127.0.0.1:3099',
+      },
+    },
+  ],
 });

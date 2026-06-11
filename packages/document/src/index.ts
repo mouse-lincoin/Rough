@@ -19,3 +19,8 @@ export {
   type DocumentMeta,
 } from './metaStore.js';
 export { storeAssetBlob, getAssetBlob, deleteDocumentAssets } from './assetStore.js';
+export {
+  saveDocumentThumbnail,
+  getDocumentThumbnail,
+  deleteDocumentThumbnail,
+} from './thumbnailStore.js';
