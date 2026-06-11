@@ -504,6 +504,11 @@ body,
   gap: 4px;
 }
 
+.prop-label-draggable {
+  cursor: ew-resize;
+  user-select: none;
+}
+
 .prop-label {
   font-size: 11px;
   color: #888;

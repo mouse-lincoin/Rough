@@ -30,7 +30,7 @@ export class ToolManager {
       ['frame', new FrameTool(ctx)],
       ['text', new TextTool(ctx)],
       ['polygon', new PolygonTool(ctx)],
-      ['arrow', new ArrowTool(ctx)],
+      ['arrow', new ArrowTool(ctx, host as import('../Editor.js').Editor)],
       ['comment', new CommentTool(ctx, host as import('../Editor.js').Editor)],
     ]);
     this._activeTool = this.tools.get('select')!;

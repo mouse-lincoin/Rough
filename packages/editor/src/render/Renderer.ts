@@ -4,6 +4,7 @@ import type { SceneGraph } from '../scene/SceneGraph.js';
 import type { SceneNode } from '../scene/SceneNode.js';
 import { aabbIntersects, getWorldAABB } from '../scene/bounds.js';
 import type { Viewport } from './viewport.js';
+import { applyCanvasEffects, clearCanvasEffects } from './effects.js';
 import { renderShape } from './shapeRenderers/index.js';
 import { renderFrameBackground, renderFrameBorder, renderFrameLabel } from './shapeRenderers/frame.js';
 import type { ImageCache } from './imageCache.js';
@@ -107,7 +108,9 @@ export class Renderer {
       return;
     }
 
+    applyCanvasEffects(ctx, el.effects);
     renderShape(ctx, node, nodeForceClean, imageCache);
+    clearCanvasEffects(ctx);
     ctx.restore();
 
     const sortedChildren = [...node.children].sort((a, b) => {

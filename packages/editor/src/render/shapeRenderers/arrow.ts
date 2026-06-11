@@ -72,6 +72,7 @@ export function renderArrow(
     if (el.startHead !== 'none') {
       drawArrowHead(ctx, points[1], points[0], el.startHead, strokeColor, strokeWidth);
     }
+    drawArrowLabel(ctx, el, points);
     return;
   }
 
@@ -90,4 +91,25 @@ export function renderArrow(
   const last = points[points.length - 1];
   const prev = points[points.length - 2];
   drawArrowHead(ctx, prev, last, el.endHead, strokeColor, strokeWidth);
+  drawArrowLabel(ctx, el, points);
+}
+
+function drawArrowLabel(
+  ctx: CanvasRenderingContext2D,
+  el: ArrowElement,
+  points: { x: number; y: number }[],
+): void {
+  if (!el.label?.trim() || points.length < 2) return;
+  const midIdx = Math.floor((points.length - 1) / 2);
+  const a = points[midIdx];
+  const b = points[midIdx + 1];
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  ctx.save();
+  ctx.font = '12px Inter, sans-serif';
+  ctx.fillStyle = '#1a1a1a';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(el.label, mx, my - 4);
+  ctx.restore();
 }

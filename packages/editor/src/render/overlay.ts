@@ -20,6 +20,7 @@ export interface OverlayState {
   transformHandle: HandleType | null;
   snapGuides: SnapGuide[];
   dropTargetFrameId: ID | null;
+  bindingTargetId: ID | null;
   remotePeers: RemotePeer[];
   currentPageId: ID;
   commentPins: CommentPin[];
@@ -46,6 +47,10 @@ export class OverlayRenderer {
 
     if (state.dropTargetFrameId) {
       this.drawDropTarget(ctx, sceneGraph, viewport, state.dropTargetFrameId);
+    }
+
+    if (state.bindingTargetId) {
+      this.drawDropTarget(ctx, sceneGraph, viewport, state.bindingTargetId);
     }
 
     if (state.selectedIds.size > 0) {
@@ -189,6 +194,8 @@ export class OverlayRenderer {
   ): void {
     ctx.strokeStyle = '#FF6B6B';
     ctx.lineWidth = 1;
+    ctx.font = '10px Inter, sans-serif';
+    ctx.fillStyle = '#FF6B6B';
     for (const g of guides) {
       ctx.beginPath();
       if (g.orientation === 'horizontal') {
@@ -196,13 +203,22 @@ export class OverlayRenderer {
         const b = viewport.worldToScreen({ x: g.to, y: g.position });
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        if (g.label) {
+          const mid = { x: (a.x + b.x) / 2, y: a.y - 6 };
+          ctx.fillText(g.label, mid.x, mid.y);
+        }
       } else {
         const a = viewport.worldToScreen({ x: g.position, y: g.from });
         const b = viewport.worldToScreen({ x: g.position, y: g.to });
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        if (g.label) {
+          const mid = { x: a.x + 6, y: (a.y + b.y) / 2 };
+          ctx.fillText(g.label, mid.x, mid.y);
+        }
       }
-      ctx.stroke();
     }
   }
 

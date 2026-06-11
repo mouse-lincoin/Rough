@@ -961,11 +961,11 @@ WS     /collab/:documentId?token=   # Hocuspocus
 | ~~2~~ | ~~P0~~ | 变换/图层 | ~~旋转 reparent 跳位~~ ✅ 已修:按世界中心换算新 parent 局部坐标 | §8.1/§8.5 | `treeCommands.ts` |
 | ~~3~~ | ~~P0~~ | 评论 | ~~`C` 工具绑定选中元素~~ ✅ 已修:点击处 `hitTestPoint` | §7.2 | `Editor.ts` `placeComment` |
 | ~~4~~ | ~~P0~~ | 持久化 | ~~load 不跑迁移~~ ✅ 已修:`applySchemaMigrations` + v0→v1 迁移 | §11 | `version.ts`, `DocumentStore.ts` |
-| 5 | P1 | 渲染/属性 | `Effect`(drop-shadow / layer-blur)数据模型有,渲染与面板未接 | §5.2/§8.2 | `Renderer.ts`, `PropertiesPanel.tsx` |
-| 6 | P1 | 箭头 | `label` 未渲染;`orthogonal` 路由未做;吸附无目标高亮 | §8.4 | `arrow.ts`, `ArrowTool.ts` |
-| 7 | P1 | 吸附 | 等间距检测与间距标注未做;resize 过程不吸附 | §7.5 | `snapping.ts`, `SelectTool.ts` |
-| 8 | P1 | 变换 | 多选无手柄;Alt+拖拽复制、方向键微移未做;文本 resize 不切 auto-height | §7.4 | `SelectTool.ts`, `transformHandles.ts` |
-| 9 | P1 | 属性面板 | 填充仅 solid;描边无颜色/线型;圆角无四角独立;无拖拽标签改值 | §8.2 | `PropertiesPanel.tsx` |
+| ~~5~~ | ~~P1~~ | 渲染/属性 | ~~Effect 未接~~ ✅ 渲染器 `applyCanvasEffects` + 面板投影/模糊 | §5.2/§8.2 | `effects.ts`, `PropertiesPanel.tsx` |
+| ~~6~~ | ~~P1~~ | 箭头 | ~~label/orthogonal/高亮~~ ✅ 已修(默认 orthogonal;绑定高亮) | §8.4 | `arrowRouting.ts`, `arrow.ts`, `ArrowTool.ts` |
+| ~~7~~ | ~~P1~~ | 吸附 | ~~等间距/resize 吸附~~ ✅ 等间距标注 + resize 吸附 | §7.5 | `snapping.ts`, `SelectTool.ts` |
+| ~~8~~ | ~~P1~~ | 变换 | ~~多选/Alt/方向键/文本 resize~~ ✅ 已修 | §7.4 | `SelectTool.ts`, `overlay.ts` |
+| ~~9~~ | ~~P1~~ | 属性面板 | ~~填充/描边/圆角/拖拽改值~~ ✅ 已修 | §8.2 | `PropertiesPanel.tsx` |
 | 10 | P1 | Auto Layout | `justifyContent` 未参与求解;布局内拖拽重排未做;Frame hug 不写回;sizing 无 UI | §8.6 | `autoLayout.ts`, `PropertiesPanel.tsx` |
 | 11 | P1 | 组件 | 删主组件不自动 Detach;创建不支持自动包 Frame;非白名单 override 静默忽略 | §8.7 | `componentCommands.ts`, `PropertiesPanel.tsx` |
 | 12 | P1 | 页面/组件库 | 页面列表无拖拽排序;线框组件「拖入」实为点击固定落点 | §8.3/§8.8 | `PagesPanel.tsx`, `ComponentsPanel.tsx` |

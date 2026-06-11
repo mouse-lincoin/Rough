@@ -97,6 +97,7 @@ export class Editor implements EditorHost {
   private panelsVisible = true;
   private snapGuides: SnapGuide[] = [];
   private dropTargetFrameId: ID | null = null;
+  private bindingTargetId: ID | null = null;
   private resizingIds = new Set<ID>();
   private width = 0;
   private height = 0;
@@ -268,6 +269,7 @@ export class Editor implements EditorHost {
       transformHandle: null,
       snapGuides: this.snapGuides,
       dropTargetFrameId: this.dropTargetFrameId,
+      bindingTargetId: this.bindingTargetId,
       remotePeers: this.remotePeers,
       currentPageId: this.document.getCurrentPageId(),
       commentPins: this.commentPins,
@@ -325,6 +327,11 @@ export class Editor implements EditorHost {
 
   setDropTargetFrame(frameId: ID | null): void {
     this.dropTargetFrameId = frameId;
+    this.requestRender();
+  }
+
+  setBindingTarget(elementId: ID | null): void {
+    this.bindingTargetId = elementId;
     this.requestRender();
   }
 
