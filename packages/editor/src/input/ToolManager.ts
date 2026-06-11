@@ -9,14 +9,16 @@ import { LineTool } from './tools/LineTool.js';
 import { PenTool } from './tools/PenTool.js';
 import { FrameTool } from './tools/FrameTool.js';
 import { TextTool } from './tools/TextTool.js';
+import { PolygonTool } from './tools/PolygonTool.js';
+import { ArrowTool } from './tools/ArrowTool.js';
 
 export class ToolManager {
   private tools: Map<ToolName, Tool>;
   private _activeTool: Tool;
   selectTool: SelectTool;
 
-  constructor(ctx: EditorContext) {
-    this.selectTool = new SelectTool(ctx);
+  constructor(ctx: EditorContext, host?: import('../EditorContext.js').EditorHost & { getGridSnap?: () => boolean; setSnapGuides?: (guides: import('../interactions/snapping.js').SnapGuide[]) => void }) {
+    this.selectTool = new SelectTool(ctx, host);
     this.tools = new Map<ToolName, Tool>([
       ['select', this.selectTool],
       ['hand', new HandTool(ctx)],
@@ -26,6 +28,8 @@ export class ToolManager {
       ['pen', new PenTool(ctx)],
       ['frame', new FrameTool(ctx)],
       ['text', new TextTool(ctx)],
+      ['polygon', new PolygonTool(ctx)],
+      ['arrow', new ArrowTool(ctx)],
     ]);
     this._activeTool = this.tools.get('select')!;
   }

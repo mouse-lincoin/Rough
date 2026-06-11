@@ -5,6 +5,7 @@ import type { Viewport } from './viewport.js';
 import type { Rect } from '../types.js';
 import type { HandleType } from '../interactions/transformHandles.js';
 import { getHandlePositions } from '../interactions/transformHandles.js';
+import type { SnapGuide } from '../interactions/snapping.js';
 
 const HANDLE_SIZE = 8;
 const ACCENT = '#6965DB';
@@ -13,6 +14,7 @@ export interface OverlayState {
   selectedIds: Set<ID>;
   marqueeRect: Rect | null;
   transformHandle: HandleType | null;
+  snapGuides: SnapGuide[];
 }
 
 export class OverlayRenderer {
@@ -29,11 +31,39 @@ export class OverlayRenderer {
       this.drawMarquee(ctx, viewport, state.marqueeRect);
     }
 
+    if (state.snapGuides.length > 0) {
+      this.drawSnapGuides(ctx, viewport, state.snapGuides);
+    }
+
     if (state.selectedIds.size > 0) {
       this.drawSelection(ctx, sceneGraph, viewport, state.selectedIds);
     }
 
     ctx.restore();
+  }
+
+  private drawSnapGuides(
+    ctx: CanvasRenderingContext2D,
+    viewport: Viewport,
+    guides: SnapGuide[],
+  ): void {
+    ctx.strokeStyle = '#FF6B6B';
+    ctx.lineWidth = 1;
+    for (const g of guides) {
+      ctx.beginPath();
+      if (g.orientation === 'horizontal') {
+        const a = viewport.worldToScreen({ x: g.from, y: g.position });
+        const b = viewport.worldToScreen({ x: g.to, y: g.position });
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      } else {
+        const a = viewport.worldToScreen({ x: g.position, y: g.from });
+        const b = viewport.worldToScreen({ x: g.position, y: g.to });
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      }
+      ctx.stroke();
+    }
   }
 
   private drawMarquee(ctx: CanvasRenderingContext2D, viewport: Viewport, rect: Rect): void {

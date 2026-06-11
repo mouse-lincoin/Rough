@@ -1,12 +1,16 @@
 import type {
+  ArrowBinding,
+  ArrowElement,
   AssetRef,
   Element,
   EllipseElement,
   FrameElement,
+  GroupElement,
   ID,
   ImageElement,
   LineElement,
   PathElement,
+  PolygonElement,
   RectangleElement,
   TextElement,
   Vec2,
@@ -208,6 +212,86 @@ export function createText(
       color: { r: 26, g: 26, b: 26, a: 1 },
     },
     autoSize,
+  };
+}
+
+export function createPolygon(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  sides: number,
+  defaults: ElementDefaults,
+): PolygonElement {
+  return {
+    ...baseProps(defaults),
+    type: 'polygon',
+    name: '多边形',
+    x,
+    y,
+    width: Math.abs(width),
+    height: Math.abs(height),
+    rotation: 0,
+    sides: Math.max(3, Math.min(12, sides)),
+  };
+}
+
+export function createArrow(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  defaults: ElementDefaults,
+  startBinding: ArrowBinding | null = null,
+  endBinding: ArrowBinding | null = null,
+): ArrowElement {
+  const minX = Math.min(x1, x2);
+  const minY = Math.min(y1, y2);
+  const maxX = Math.max(x1, x2);
+  const maxY = Math.max(y1, y2);
+  return {
+    ...baseProps(defaults),
+    type: 'arrow',
+    name: '箭头',
+    x: minX,
+    y: minY,
+    width: Math.max(maxX - minX, 1),
+    height: Math.max(maxY - minY, 1),
+    rotation: 0,
+    points: [
+      { x: x1 - minX, y: y1 - minY },
+      { x: x2 - minX, y: y2 - minY },
+    ],
+    routing: 'straight',
+    startBinding,
+    endBinding,
+    startHead: 'none',
+    endHead: 'arrow',
+    label: null,
+    fills: [],
+  };
+}
+
+export function createGroup(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  defaults: ElementDefaults,
+): GroupElement {
+  return {
+    ...baseProps(defaults),
+    type: 'group',
+    name: '编组',
+    x,
+    y,
+    width,
+    height,
+    rotation: 0,
+    fills: [],
+    strokes: [],
+    roughness: 0,
+    roughSeed: 0,
   };
 }
 

@@ -4,6 +4,10 @@ import { getDocumentMeta, createDocumentMeta, updateDocumentMeta } from '@rough/
 import type { Editor } from '@rough/editor';
 import { CanvasHost } from '../components/CanvasHost';
 import { Toolbar } from '../components/Toolbar/Toolbar';
+import { LayerPanel } from '../components/LayerPanel/LayerPanel';
+import { PropertiesPanel } from '../components/PropertiesPanel/PropertiesPanel';
+import { PagesPanel } from '../components/PagesPanel/PagesPanel';
+import { useEditorStore } from '../stores/editorStore';
 
 export function EditorPage(): JSX.Element {
   const { docId } = useParams<{ docId: string }>();
@@ -11,6 +15,7 @@ export function EditorPage(): JSX.Element {
   const editorRef = useRef<Editor | null>(null);
   const [docName, setDocName] = useState('未命名');
   const [metaReady, setMetaReady] = useState(false);
+  const panelsVisible = useEditorStore((s) => s.panelsVisible);
 
   useEffect(() => {
     if (!docId) {
@@ -39,6 +44,23 @@ export function EditorPage(): JSX.Element {
   const handlePaste = (e: React.ClipboardEvent): void => {
     const items = e.clipboardData?.items;
     if (!items || !editorRef.current) return;
+
+    const roughItem = Array.from(items).find((item) =>
+      item.type === 'application/x-rough+json',
+    );
+    if (roughItem) {
+      e.preventDefault();
+      const container = document.querySelector('.canvas-host');
+      const rect = container?.getBoundingClientRect();
+      if (!rect) return;
+      const world = editorRef.current.viewport.screenToWorld({
+        x: rect.width / 2,
+        y: rect.height / 2,
+      });
+      void editorRef.current.pasteAt(world.x, world.y);
+      return;
+    }
+
     for (const item of items) {
       if (item.type.startsWith('image/')) {
         e.preventDefault();
@@ -74,9 +96,22 @@ export function EditorPage(): JSX.Element {
         />
         <Toolbar editorRef={editorRef} />
       </header>
-      <main className="app-main">
-        <CanvasHost docId={docId} docName={docName} editorRef={editorRef} />
-      </main>
+      <div className="editor-layout">
+        {panelsVisible && (
+          <aside className="editor-sidebar editor-sidebar-left">
+            <PagesPanel editorRef={editorRef} />
+            <LayerPanel editorRef={editorRef} />
+          </aside>
+        )}
+        <main className="app-main">
+          <CanvasHost docId={docId} docName={docName} editorRef={editorRef} />
+        </main>
+        {panelsVisible && (
+          <aside className="editor-sidebar editor-sidebar-right">
+            <PropertiesPanel editorRef={editorRef} />
+          </aside>
+        )}
+      </div>
     </div>
   );
 }

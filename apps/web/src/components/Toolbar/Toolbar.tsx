@@ -8,7 +8,9 @@ const TOOLS: { name: ToolName; label: string; shortcut: string }[] = [
   { name: 'frame', label: 'Frame', shortcut: 'F' },
   { name: 'rectangle', label: '矩形', shortcut: 'R' },
   { name: 'ellipse', label: '椭圆', shortcut: 'O' },
+  { name: 'polygon', label: '多边形', shortcut: 'Y' },
   { name: 'line', label: '直线', shortcut: 'L' },
+  { name: 'arrow', label: '箭头', shortcut: 'A' },
   { name: 'pen', label: '画笔', shortcut: 'P' },
   { name: 'text', label: '文本', shortcut: 'T' },
 ];

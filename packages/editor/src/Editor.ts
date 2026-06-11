@@ -1,7 +1,7 @@
 import type { DocumentStore } from '@rough/document';
 import { storeAssetBlob } from '@rough/document';
-import type { ID } from '@rough/schema';
-import { AddElementCommand } from './commands/ElementCommands.js';
+import type { Element, ID, Page, Stroke, FillStyle } from '@rough/schema';
+import { AddElementCommand, UpdateElementsCommand } from './commands/ElementCommands.js';
 import { createImage } from './document/elementFactory.js';
 import { SceneGraph } from './scene/SceneGraph.js';
 import { SelectionManager } from './interactions/selection.js';
@@ -14,6 +14,25 @@ import { InputPipeline } from './input/InputPipeline.js';
 import { TextEditorOverlay } from './text/textEditorOverlay.js';
 import { ImageCache } from './render/imageCache.js';
 import type { EditorCallbacks, ToolName } from './types.js';
+import type { SnapGuide } from './interactions/snapping.js';
+import {
+  alignSelection,
+  copySelection,
+  cutSelection,
+  distributeSelection,
+  duplicateSelection,
+  fitViewportToContent,
+  fitViewportToSelection,
+  getPages,
+  groupSelection,
+  moveElementInTree,
+  pasteClipboard,
+  refreshBoundArrows,
+  reorderLayers,
+  switchPage,
+  ungroupSelection,
+} from './EditorActions.js';
+import type { AlignType } from './interactions/align.js';
 
 export interface EditorOptions {
   container: HTMLElement;
@@ -41,6 +60,9 @@ export class Editor implements EditorHost {
   private viewportDirty = true;
   private rafId: number | null = null;
   private cleanMode = false;
+  private gridSnap = false;
+  private panelsVisible = true;
+  private snapGuides: SnapGuide[] = [];
   private resizingIds = new Set<ID>();
   private width = 0;
   private height = 0;
@@ -48,12 +70,17 @@ export class Editor implements EditorHost {
   private callbacks: EditorCallbacks;
   private mainCanvas: HTMLCanvasElement;
   private overlayCanvas: HTMLCanvasElement;
+  private copiedStyle: { fills: FillStyle[]; strokes: Stroke[]; roughness: number } | null = null;
 
   constructor(options: EditorOptions) {
     this.callbacks = options.callbacks ?? {};
     this.mainCanvas = options.mainCanvas;
     this.overlayCanvas = options.overlayCanvas;
     this.document = options.document;
+
+    const savedViewport = this.document.getPageViewport(this.document.getCurrentPageId());
+    this.viewport.offset = { ...savedViewport.offset };
+    this.viewport.zoom = savedViewport.zoom;
 
     this.ctx = new EditorContext(
       this.document,
@@ -62,7 +89,7 @@ export class Editor implements EditorHost {
       this.viewport,
       this,
     );
-    this.tools = new ToolManager(this.ctx);
+    this.tools = new ToolManager(this.ctx, this);
     this.textEditor = new TextEditorOverlay(options.container, this.ctx, this.viewport);
 
     this.selection.subscribe((ids) => {
@@ -72,7 +99,9 @@ export class Editor implements EditorHost {
 
     this.document.subscribe(() => {
       this.sceneGraph.rebuild(this.document.getElements());
+      refreshBoundArrows(this.ctx);
       this.markSceneDirty();
+      this.callbacks.onDocumentChange?.();
     });
 
     this.sceneGraph.rebuild(this.document.getElements());
@@ -82,6 +111,7 @@ export class Editor implements EditorHost {
       options.mainCanvas,
       this.ctx,
       this.tools,
+      this,
       (tool) => {
         this.callbacks.onToolChange?.(tool);
       },
@@ -167,6 +197,7 @@ export class Editor implements EditorHost {
       selectedIds: this.selection.selectedIds,
       marqueeRect: selectTool.getMarqueeRect(),
       transformHandle: null,
+      snapGuides: this.snapGuides,
     });
   }
 
@@ -192,6 +223,32 @@ export class Editor implements EditorHost {
     this.markSceneDirty();
   }
 
+  getGridSnap(): boolean {
+    return this.gridSnap;
+  }
+
+  setGridSnap(enabled: boolean): void {
+    this.gridSnap = enabled;
+  }
+
+  getPanelsVisible(): boolean {
+    return this.panelsVisible;
+  }
+
+  setPanelsVisible(visible: boolean): void {
+    this.panelsVisible = visible;
+    this.callbacks.onPanelsToggle?.(visible);
+  }
+
+  togglePanels(): void {
+    this.setPanelsVisible(!this.panelsVisible);
+  }
+
+  setSnapGuides(guides: SnapGuide[]): void {
+    this.snapGuides = guides;
+    this.requestRender();
+  }
+
   getResizingIds(): Set<ID> {
     return this.resizingIds;
   }
@@ -209,12 +266,188 @@ export class Editor implements EditorHost {
     this.switchTool(tool);
   }
 
-  startTextEditing(element: import('@rough/schema').TextElement): void {
-    this.textEditor.startEditing(element);
+  getSelection(): ID[] {
+    return this.selection.getIds();
+  }
+
+  setSelection(ids: ID[]): void {
+    this.selection.select(ids);
   }
 
   getContext(): EditorContext {
     return this.ctx;
+  }
+
+  getPages(): Page[] {
+    return getPages(this.document);
+  }
+
+  getCurrentPageId(): ID {
+    return this.document.getCurrentPageId();
+  }
+
+  switchPage(pageId: ID): void {
+    switchPage(
+      this.document,
+      this.viewport,
+      this.selection,
+      pageId,
+      this.width,
+      this.height,
+      (id) => this.callbacks.onPageChange?.(id),
+    );
+    this.sceneGraph.rebuild(this.document.getElements());
+    this.markSceneDirty();
+    this.callbacks.onDocumentChange?.();
+  }
+
+  addPage(name?: string): ID {
+    const id = this.document.addPage(name);
+    this.callbacks.onDocumentChange?.();
+    return id;
+  }
+
+  removePage(pageId: ID): void {
+    this.document.removePage(pageId);
+    this.sceneGraph.rebuild(this.document.getElements());
+    this.callbacks.onDocumentChange?.();
+  }
+
+  renamePage(pageId: ID, name: string): void {
+    this.document.renamePage(pageId, name);
+    this.callbacks.onDocumentChange?.();
+  }
+
+  reorderPages(pageIds: ID[]): void {
+    this.document.reorderPages(pageIds);
+    this.callbacks.onDocumentChange?.();
+  }
+
+  updateElements(elements: Element[]): void {
+    this.ctx.runCommand(new UpdateElementsCommand(this.document, elements));
+  }
+
+  updateElementProperty(id: ID, patch: Partial<Element>): void {
+    const el = this.document.getElement(id);
+    if (!el) return;
+    this.ctx.runCommand(new UpdateElementsCommand(this.document, [{ ...el, ...patch } as Element]));
+  }
+
+  group(): void {
+    groupSelection(this.ctx, this.selection.getIds());
+  }
+
+  ungroup(): void {
+    ungroupSelection(this.ctx, this.selection.getIds());
+  }
+
+  align(type: AlignType): void {
+    alignSelection(this.ctx, this.selection.getIds(), type);
+  }
+
+  distribute(axis: 'horizontal' | 'vertical'): void {
+    distributeSelection(this.ctx, this.selection.getIds(), axis);
+  }
+
+  reorderLayer(direction: 'forward' | 'backward' | 'front' | 'back'): void {
+    reorderLayers(this.ctx, this.selection.getIds(), direction);
+  }
+
+  async copy(): Promise<void> {
+    await copySelection(this.ctx, this.selection.getIds());
+  }
+
+  async cut(): Promise<void> {
+    await cutSelection(this.ctx, this.selection.getIds(), this.selection);
+  }
+
+  async pasteAt(worldX: number, worldY: number): Promise<void> {
+    const ids = await pasteClipboard(this.ctx, worldX, worldY);
+    if (ids.length > 0) this.selection.select(ids);
+  }
+
+  duplicate(): void {
+    const ids = duplicateSelection(this.ctx, this.selection.getIds());
+    if (ids.length > 0) this.selection.select(ids);
+  }
+
+  moveElementInTree(elementId: ID, newParentId: ID | null, beforeSiblingId: ID | null): void {
+    moveElementInTree(this.document, this.sceneGraph, elementId, newParentId, beforeSiblingId);
+    this.sceneGraph.rebuild(this.document.getElements());
+    refreshBoundArrows(this.ctx);
+    this.markSceneDirty();
+    this.callbacks.onDocumentChange?.();
+  }
+
+  copyStyle(): void {
+    const ids = this.selection.getIds();
+    if (ids.length !== 1) return;
+    const el = this.document.getElement(ids[0]);
+    if (!el) return;
+    this.copiedStyle = {
+      fills: structuredClone(el.fills),
+      strokes: structuredClone(el.strokes),
+      roughness: el.roughness,
+    };
+  }
+
+  pasteStyle(): void {
+    if (!this.copiedStyle) return;
+    const elements = this.selection
+      .getIds()
+      .map((id) => this.document.getElement(id))
+      .filter((e): e is Element => e !== undefined)
+      .map((e) => ({
+        ...e,
+        fills: structuredClone(this.copiedStyle!.fills),
+        strokes: structuredClone(this.copiedStyle!.strokes),
+        roughness: this.copiedStyle!.roughness,
+      }));
+    if (elements.length > 0) {
+      this.ctx.runCommand(new UpdateElementsCommand(this.document, elements));
+    }
+  }
+
+  zoomTo100(): void {
+    this.viewport.zoom = 1;
+    this.markSceneDirty();
+  }
+
+  zoomIn(): void {
+    this.viewport.zoomAt({ x: this.width / 2, y: this.height / 2 }, 1.2);
+    this.markSceneDirty();
+  }
+
+  zoomOut(): void {
+    this.viewport.zoomAt({ x: this.width / 2, y: this.height / 2 }, 0.8);
+    this.markSceneDirty();
+  }
+
+  fitAll(): void {
+    fitViewportToContent(this.viewport, this.sceneGraph, this.width, this.height);
+    this.markSceneDirty();
+  }
+
+  fitSelection(): void {
+    fitViewportToSelection(
+      this.viewport,
+      this.sceneGraph,
+      this.selection.getIds(),
+      this.width,
+      this.height,
+    );
+    this.markSceneDirty();
+  }
+
+  persistViewport(): void {
+    this.document.persistPageViewport(this.document.getCurrentPageId(), {
+      offset: { ...this.viewport.offset },
+      zoom: this.viewport.zoom,
+    });
+  }
+
+  startTextEditing(element: import('@rough/schema').TextElement): void {
+    this.textEditor.startEditing(element);
   }
 
   async importImage(file: File, worldX: number, worldY: number): Promise<void> {
@@ -237,6 +470,7 @@ export class Editor implements EditorHost {
   }
 
   destroy(): void {
+    this.persistViewport();
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
     }
