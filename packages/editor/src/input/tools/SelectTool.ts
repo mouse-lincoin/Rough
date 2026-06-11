@@ -9,10 +9,12 @@ import { collectSubtree } from '../../clipboard/clipboard.js';
 import { getSelectionRoots } from '../../interactions/treeUtils.js';
 import {
   applyResize,
+  elementLocalBounds,
   hitTestHandle,
+  worldDeltaToElementLocal,
   type HandleType,
 } from '../../interactions/transformHandles.js';
-import { aabbToRect, getRotatedWorldCorners, getWorldAABB } from '../../scene/bounds.js';
+import { getRotatedWorldCorners } from '../../scene/bounds.js';
 import { computeSnapAdjust } from '../../interactions/snapping.js';
 import type { NormalizedPointerEvent, Rect } from '../../types.js';
 import type { Tool } from './BaseTool.js';
@@ -27,6 +29,7 @@ export class SelectTool implements Tool {
   private beforeSnapshots: Element[] = [];
   private activeHandle: HandleType | null = null;
   private startBounds = { x: 0, y: 0, width: 0, height: 0 };
+  private rotateCenterWorld = { x: 0, y: 0 };
   private startRotation = 0;
   private marqueeRect: Rect | null = null;
   private marqueeAdditive = false;
@@ -81,8 +84,9 @@ export class SelectTool implements Tool {
     if (selected.length === 1) {
       const node = this.ctx.sceneGraph.getNode(selected[0]);
       if (node) {
-        const corners = getRotatedWorldCorners(node).map((c) => this.ctx.viewport.worldToScreen(c));
-        const handle = hitTestHandle(e.screen, corners);
+        const worldCorners = getRotatedWorldCorners(node);
+        const screenCorners = worldCorners.map((c) => this.ctx.viewport.worldToScreen(c));
+        const handle = hitTestHandle(e.screen, screenCorners);
         if (handle) {
           this.mode = handle === 'rotate' ? 'rotate' : 'resize';
           this.activeHandle = handle;
@@ -90,9 +94,12 @@ export class SelectTool implements Tool {
             .map((id) => this.ctx.document.getElement(id))
             .filter((el): el is Element => el !== undefined)
             .map((el) => structuredClone(el));
-          const aabb = getWorldAABB(node);
-          this.startBounds = aabbToRect(aabb);
+          this.startBounds = elementLocalBounds(node.element);
           this.startRotation = node.element.rotation;
+          this.rotateCenterWorld = {
+            x: (worldCorners[0].x + worldCorners[2].x) / 2,
+            y: (worldCorners[0].y + worldCorners[2].y) / 2,
+          };
           this.dragStartWorld = { ...e.world };
           if (this.mode === 'resize') {
             this.ctx.setResizingIds(new Set(selected));
@@ -230,16 +237,19 @@ export class SelectTool implements Tool {
     }
 
     if (this.mode === 'resize' && this.activeHandle && this.activeHandle !== 'rotate') {
+      const id = this.beforeSnapshots[0]?.id;
+      if (!id) return;
+      const node = this.ctx.sceneGraph.getNode(id);
+      if (!node) return;
+      const localDelta = worldDeltaToElementLocal(node, dx, dy);
       const bounds = applyResize(
         this.activeHandle,
         this.startBounds,
-        dx,
-        dy,
+        localDelta.x,
+        localDelta.y,
         e.shiftKey,
         e.altKey,
       );
-      const id = this.beforeSnapshots[0]?.id;
-      if (!id) return;
       const el = this.ctx.document.getElement(id);
       if (!el) return;
       this.ctx.updateElementsLive([{ ...el, x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }]);
@@ -248,8 +258,8 @@ export class SelectTool implements Tool {
 
     if (this.mode === 'rotate' && this.beforeSnapshots.length === 1) {
       const el = this.beforeSnapshots[0];
-      const cx = this.startBounds.x + this.startBounds.width / 2;
-      const cy = this.startBounds.y + this.startBounds.height / 2;
+      const cx = this.rotateCenterWorld.x;
+      const cy = this.rotateCenterWorld.y;
       const startAngle = Math.atan2(this.dragStartWorld.y - cy, this.dragStartWorld.x - cx);
       const currentAngle = Math.atan2(e.world.y - cy, e.world.x - cx);
       let delta = currentAngle - startAngle;

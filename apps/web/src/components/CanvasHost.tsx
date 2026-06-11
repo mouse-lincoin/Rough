@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { DocumentStore } from '@rough/document';
-import { Editor } from '@rough/editor';
+import { Editor, type EditorCallbacks } from '@rough/editor';
 import { useEditorStore } from '../stores/editorStore';
 import { attachE2EBridge } from '../e2eBridge';
 
@@ -41,6 +41,19 @@ export function CanvasHost({
   const setCurrentPageId = useEditorStore((s) => s.setCurrentPageId);
   const setPanelsVisible = useEditorStore((s) => s.setPanelsVisible);
 
+  const hostCallbacksRef = useRef<EditorCallbacks & { onEditorReady?: () => void }>({});
+  hostCallbacksRef.current = {
+    onExportRequest,
+    onShortcutsRequest,
+    onCommentPlace,
+    onCommentPinClick,
+    onEditorReady,
+  };
+
+  useEffect(() => {
+    editorRef.current?.setReadOnly(readOnly);
+  }, [editorRef, readOnly]);
+
   useEffect(() => {
     const container = containerRef.current;
     const mainCanvas = mainCanvasRef.current;
@@ -68,10 +81,11 @@ export function CanvasHost({
           onDocumentChange: bumpDocumentVersion,
           onPageChange: setCurrentPageId,
           onPanelsToggle: setPanelsVisible,
-          onExportRequest,
-          onShortcutsRequest,
-          onCommentPlace,
-          onCommentPinClick,
+          onExportRequest: () => hostCallbacksRef.current.onExportRequest?.(),
+          onShortcutsRequest: () => hostCallbacksRef.current.onShortcutsRequest?.(),
+          onCommentPlace: (anchor) => hostCallbacksRef.current.onCommentPlace?.(anchor),
+          onCommentPinClick: (id, screen) =>
+            hostCallbacksRef.current.onCommentPinClick?.(id, screen),
         },
       });
 
@@ -83,7 +97,7 @@ export function CanvasHost({
       (window as unknown as { __ROUGH_EDITOR__?: Editor }).__ROUGH_EDITOR__ = editor;
       setCurrentPageId(editor.getCurrentPageId());
       setPanelsVisible(editor.getPanelsVisible());
-      onEditorReady?.();
+      hostCallbacksRef.current.onEditorReady?.();
     };
 
     void init();
@@ -103,11 +117,6 @@ export function CanvasHost({
     bumpDocumentVersion,
     setCurrentPageId,
     setPanelsVisible,
-    onExportRequest,
-    onShortcutsRequest,
-    onCommentPlace,
-    onCommentPinClick,
-    onEditorReady,
     readOnly,
   ]);
 
