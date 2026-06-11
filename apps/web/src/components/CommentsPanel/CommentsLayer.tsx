@@ -8,7 +8,7 @@ interface CommentsLayerProps {
 }
 
 export function CommentsLayer({ editorRef }: CommentsLayerProps): null {
-  const { comments, activeThreadId } = useComments();
+  const { comments, activeThreadId, degradeAnchors } = useComments();
   const documentVersion = useEditorStore((s) => s.documentVersion);
   const currentPageId = useEditorStore((s) => s.currentPageId);
 
@@ -33,6 +33,15 @@ export function CommentsLayer({ editorRef }: CommentsLayerProps): null {
   useEffect(() => {
     editorRef.current?.setHighlightedCommentId(activeThreadId);
   }, [activeThreadId, editorRef]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.setCommentAnchorsDegradeHandler((updates) => {
+      void degradeAnchors(updates);
+    });
+    return () => editor.setCommentAnchorsDegradeHandler(undefined);
+  }, [degradeAnchors, editorRef, documentVersion]);
 
   return null;
 }

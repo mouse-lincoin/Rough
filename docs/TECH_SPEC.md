@@ -949,7 +949,7 @@ WS     /collab/:documentId?token=   # Hocuspocus
 | 导出 §8.11 | ✅ 五格式齐全(SVG 覆盖部分图形) |
 | 协作 §9 | ✅ 主编辑器已接入(光标插值/跟随模式未做) |
 | 后端 §10 | ✅ REST/DB/S3 齐全(前端走 DEV_AUTH 开发登录) |
-| 评论 §8.10 | ✅ 锚点/浮层/跳转已接通(退化逻辑有 bug,见 B.2) |
+| 评论 §8.10 | ✅ 锚点/浮层/跳转已接通(删除元素退化已修;遗留孤儿 elementId 仍可能跳位) |
 
 ### B.2 已知差距清单(按优先级)
 
@@ -957,7 +957,7 @@ WS     /collab/:documentId?token=   # Hocuspocus
 
 | # | P | 模块 | 待办 | 规格 | 关键入口 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | P0 | 评论 | 元素删除后锚点退化:DB 局部坐标被当世界坐标回退渲染 | §8.10 | `commentAnchors.ts`, `CommentsLayer.tsx` |
+| ~~1~~ | ~~P0~~ | 评论 | ~~元素删除后锚点退化~~ ✅ 已修:删除元素时 `computeAnchorDegradations` 转世界坐标并 PATCH | §8.10 | `commentAnchors.ts`, `Editor.ts`, `CommentsLayer.tsx` |
 | 2 | P0 | 变换/图层 | 旋转元素 reparent 未考虑绕中心旋转,跨容器移动跳位 | §8.1/§8.5 | `treeCommands.ts`, `LayerPanel.tsx` |
 | 3 | P0 | 评论 | `C` 工具绑定当前选中元素,非点击处 hitTest | §7.2 | `Editor.ts` `placeComment`, `CommentTool.ts` |
 | 4 | P0 | 持久化 | `DocumentStore.load` 不执行 schema 迁移,`migrations` 为空 | §11 | `version.ts`, `DocumentStore.ts` |
@@ -979,7 +979,7 @@ WS     /collab/:documentId?token=   # Hocuspocus
 
 #### 正确性问题(P0)
 
-1. 评论锚点退化:绑定元素被删除后,DB 中存的元素局部坐标被当作世界坐标回退渲染,锚点会跳位(§8.10 要求退化为 worldPos)。
+1. ~~评论锚点退化~~ ✅ **已修(v1.1.1)**:删除元素前用 `computeAnchorDegradations` 将局部锚点转为世界坐标、`elementId` 置空并 PATCH 持久化。
 2. 旋转元素跨容器移动:reparent 坐标换算未考虑绕中心旋转,旋转非 0 的元素拖入/拖出 Frame 或图层面板跨容器移动时会跳位(§8.1/§8.5)。
 3. 评论放置:`C` 工具绑定的是当前选中元素而非点击处 hitTest 结果(§7.2)。
 4. schema 迁移链:框架存在但 `DocumentStore.load` 不执行迁移,`migrations` 为空(§11);schemaVersion 升级前必须补上。

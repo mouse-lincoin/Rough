@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { Element } from '@rough/schema';
 import { SceneGraph } from '../scene/SceneGraph.js';
-import { resolveCommentAnchorWorld, worldToElementLocal } from './commentAnchors.js';
+import {
+  computeAnchorDegradations,
+  resolveCommentAnchorWorld,
+  worldToElementLocal,
+} from './commentAnchors.js';
 
 function rect(id: string, x: number, y: number): Element {
   return {
@@ -51,7 +55,7 @@ describe('commentAnchors', () => {
     expect(world).toEqual({ x: 110, y: 205 });
   });
 
-  it('falls back to stored coords when element missing', () => {
+  it('falls back to stored coords when element missing (legacy orphan elementId)', () => {
     const graph = new SceneGraph();
     graph.rebuild({});
     const world = resolveCommentAnchorWorld(graph, {
@@ -60,6 +64,33 @@ describe('commentAnchors', () => {
       worldY: 34,
     });
     expect(world).toEqual({ x: 12, y: 34 });
+  });
+
+  it('degrades element-bound anchor to world position before element removal', () => {
+    const graph = new SceneGraph();
+    graph.rebuild({ a: rect('a', 100, 200) });
+    const degradations = computeAnchorDegradations(
+      graph,
+      [{ id: 'c1', elementId: 'a', worldX: 10, worldY: 5 }],
+      new Set(['a']),
+    );
+    expect(degradations).toEqual([
+      { id: 'c1', elementId: null, worldX: 110, worldY: 205 },
+    ]);
+  });
+
+  it('ignores pins not bound to deleted elements', () => {
+    const graph = new SceneGraph();
+    graph.rebuild({ a: rect('a', 0, 0), b: rect('b', 50, 50) });
+    const degradations = computeAnchorDegradations(
+      graph,
+      [
+        { id: 'c1', elementId: 'b', worldX: 5, worldY: 5 },
+        { id: 'c2', elementId: null, worldX: 1, worldY: 2 },
+      ],
+      new Set(['a']),
+    );
+    expect(degradations).toHaveLength(0);
   });
 
   it('converts world click to element-local', () => {
