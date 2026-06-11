@@ -21,6 +21,7 @@
     "@rough/schema": "workspace:*",
     "@rough/shared": "workspace:*",
     "idb": "^8.0.3",
+    "@hocuspocus/provider": "^2.15.0",
     "y-indexeddb": "^9.0.12",
     "yjs": "^13.6.31"
   },

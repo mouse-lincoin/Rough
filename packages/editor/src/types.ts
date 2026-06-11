@@ -33,6 +33,12 @@ export interface EditorCallbacks {
   onPageChange?: (pageId: ID) => void;
   onPanelsToggle?: (visible: boolean) => void;
   onExportRequest?: () => void;
+  onCommentPlace?: (anchor: {
+    pageId: ID;
+    worldX: number;
+    worldY: number;
+    elementId: ID | null;
+  }) => void;
 }
 
 export interface ExportContext {

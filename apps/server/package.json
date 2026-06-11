@@ -6,14 +6,30 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "node --watch dist/index.js",
+    "start": "node dist/index.js",
+    "db:push": "drizzle-kit push",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "dependencies": {
-    "@rough/schema": "workspace:*"
+    "@aws-sdk/client-s3": "^3.750.0",
+    "@aws-sdk/s3-request-presigner": "^3.750.0",
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/cors": "^10.0.2",
+    "@fastify/multipart": "^9.0.3",
+    "@hocuspocus/server": "^2.15.0",
+    "@rough/schema": "workspace:*",
+    "@rough/shared": "workspace:*",
+    "drizzle-orm": "^0.39.3",
+    "fastify": "^5.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "postgres": "^3.4.5",
+    "yjs": "^13.6.22"
   },
   "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.9",
+    "drizzle-kit": "^0.30.4",
     "vitest": "^2.1.8"
   }
 }

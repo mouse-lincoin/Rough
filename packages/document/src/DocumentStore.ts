@@ -9,6 +9,7 @@ import {
 import { CANVAS_BACKGROUND, createId, generateKeyBetween } from '@rough/shared';
 import { CURRENT_SCHEMA_VERSION, migrateDocument } from '@rough/schema';
 import { LOCAL_ORIGIN, PREVIEW_ORIGIN } from './constants.js';
+import { CollabSession, type CollabOptions } from './collab.js';
 import { DocumentUndoManager } from './undo.js';
 import {
   applyElementToYMap,
@@ -23,9 +24,11 @@ export class DocumentStore {
   readonly ydoc: Y.Doc;
   readonly undo: DocumentUndoManager;
   private persistence: IndexeddbPersistence | null = null;
+  private collab = new CollabSession();
   private listeners = new Set<Listener>();
   private currentPageId: ID;
   private documentId: ID;
+  private readOnly = false;
 
   private constructor(ydoc: Y.Doc, documentId: ID, currentPageId: ID) {
     this.ydoc = ydoc;
@@ -261,6 +264,7 @@ export class DocumentStore {
   }
 
   transact(fn: () => void, origin: string = LOCAL_ORIGIN): void {
+    if (this.readOnly && origin === LOCAL_ORIGIN) return;
     this.ydoc.transact(fn, origin);
   }
 
@@ -411,7 +415,32 @@ export class DocumentStore {
     });
   }
 
+  connectCollab(options: CollabOptions): void {
+    this.collab.connect(this.ydoc, options);
+  }
+
+  disconnectCollab(): void {
+    this.collab.disconnect();
+  }
+
+  getCollabAwareness(): import('@hocuspocus/provider').HocuspocusProvider['awareness'] | null {
+    return this.collab.getAwareness();
+  }
+
+  isCollabConnected(): boolean {
+    return this.collab.isConnected();
+  }
+
+  setReadOnly(readOnly: boolean): void {
+    this.readOnly = readOnly;
+  }
+
+  isReadOnly(): boolean {
+    return this.readOnly;
+  }
+
   destroy(): void {
+    this.collab.disconnect();
     this.persistence?.destroy();
     this.persistence = null;
   }
