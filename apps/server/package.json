@@ -1,0 +1,19 @@
+{
+  "name": "@rough/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node --watch dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@rough/schema": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  }
+}
