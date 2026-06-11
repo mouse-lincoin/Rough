@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getDocumentMeta, createDocumentMeta, updateDocumentMeta } from '@rough/document';
+import {
+  getDocumentMeta,
+  createDocumentMeta,
+  updateDocumentMeta,
+  isCloudSynced,
+  type DocumentMeta,
+} from '@rough/document';
 import type { Editor } from '@rough/editor';
+import { patchCloudDocument } from '../api/client';
 import { CanvasHost } from '../components/CanvasHost';
 import { Toolbar } from '../components/Toolbar/Toolbar';
 import { LayerPanel } from '../components/LayerPanel/LayerPanel';
@@ -13,19 +20,34 @@ import { ShareDialog } from '../components/ShareDialog/ShareDialog';
 import { AuthButton } from '../components/AuthButton/AuthButton';
 import { CommentsPanel, type CommentAnchor } from '../components/CommentsPanel/CommentsPanel';
 import { ShortcutsHelp } from '../components/ShortcutsHelp/ShortcutsHelp';
+import { useEditorCollab } from '../hooks/useEditorCollab';
+import { getCloudDocumentId } from '../services/cloudSync';
+import { useAuthStore } from '../stores/authStore';
 import { useEditorStore } from '../stores/editorStore';
 
 export function EditorPage(): JSX.Element {
   const { docId } = useParams<{ docId: string }>();
   const navigate = useNavigate();
   const editorRef = useRef<Editor | null>(null);
+  const [docMeta, setDocMeta] = useState<DocumentMeta | null>(null);
   const [docName, setDocName] = useState('未命名');
   const [metaReady, setMetaReady] = useState(false);
+  const [editorReady, setEditorReady] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [commentAnchor, setCommentAnchor] = useState<CommentAnchor | null>(null);
   const panelsVisible = useEditorStore((s) => s.panelsVisible);
+  const user = useAuthStore((s) => s.user);
+  const lastMigrations = useAuthStore((s) => s.lastMigrations);
+  const authInit = useAuthStore((s) => s.init);
+  const authInitialized = useAuthStore((s) => s.initialized);
+
+  const cloudDocumentId = docMeta ? getCloudDocumentId(docMeta) : null;
+
+  useEffect(() => {
+    if (!authInitialized) void authInit();
+  }, [authInitialized, authInit]);
 
   useEffect(() => {
     if (!docId) {
@@ -33,11 +55,14 @@ export function EditorPage(): JSX.Element {
       return;
     }
 
+    setEditorReady(false);
+
     const loadMeta = async (): Promise<void> => {
       let meta = await getDocumentMeta(docId);
       if (!meta) {
         meta = await createDocumentMeta('未命名', docId);
       }
+      setDocMeta(meta);
       setDocName(meta.name);
       setMetaReady(true);
     };
@@ -45,10 +70,27 @@ export function EditorPage(): JSX.Element {
     void loadMeta();
   }, [docId, navigate]);
 
+  useEffect(() => {
+    if (!docId) return;
+    const migration = lastMigrations.find((m) => m.fromId === docId);
+    if (migration) {
+      navigate(`/doc/${migration.toId}`, { replace: true });
+    }
+  }, [docId, lastMigrations, navigate]);
+
+  const handleEditorReady = useCallback(() => {
+    setEditorReady(true);
+  }, []);
+
+  useEditorCollab(editorRef, editorReady, cloudDocumentId, user);
+
   const handleNameBlur = (): void => {
     if (!docId) return;
     void updateDocumentMeta(docId, { name: docName });
     editorRef.current?.document.updateDocumentName(docName);
+    if (docMeta && isCloudSynced(docMeta)) {
+      void patchCloudDocument(docId, docName).catch(() => undefined);
+    }
   };
 
   const handlePaste = (e: React.ClipboardEvent): void => {
@@ -115,8 +157,21 @@ export function EditorPage(): JSX.Element {
           onChange={(e) => setDocName(e.target.value)}
           onBlur={handleNameBlur}
         />
+        {cloudDocumentId && user && (
+          <span className="auth-status collab-status" title="已连接云端协作">
+            协作
+          </span>
+        )}
         <Toolbar editorRef={editorRef} />
-        <button type="button" className="toolbar-btn" onClick={() => setShareOpen(true)}>分享</button>
+        <button
+          type="button"
+          className="toolbar-btn"
+          onClick={() => setShareOpen(true)}
+          disabled={!cloudDocumentId}
+          title={cloudDocumentId ? '分享' : '登录并同步后可分享'}
+        >
+          分享
+        </button>
         <AuthButton />
       </header>
       <div className="editor-layout">
@@ -135,13 +190,15 @@ export function EditorPage(): JSX.Element {
             onExportRequest={() => setExportOpen(true)}
             onCommentPlace={setCommentAnchor}
             onShortcutsRequest={() => setShortcutsOpen(true)}
+            onEditorReady={handleEditorReady}
           />
         </main>
         {panelsVisible && (
           <aside className="editor-sidebar editor-sidebar-right">
             <PropertiesPanel editorRef={editorRef} />
             <CommentsPanel
-              documentId={docId}
+              documentId={cloudDocumentId ?? docId}
+              cloudEnabled={cloudDocumentId != null}
               pendingAnchor={commentAnchor}
               onClearAnchor={() => setCommentAnchor(null)}
             />
@@ -154,7 +211,11 @@ export function EditorPage(): JSX.Element {
         docName={docName}
         onClose={() => setExportOpen(false)}
       />
-      <ShareDialog open={shareOpen} documentId={docId} onClose={() => setShareOpen(false)} />
+      <ShareDialog
+        open={shareOpen}
+        documentId={cloudDocumentId ?? docId}
+        onClose={() => setShareOpen(false)}
+      />
       <ShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   );

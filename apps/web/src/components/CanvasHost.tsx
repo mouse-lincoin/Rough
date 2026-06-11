@@ -16,6 +16,7 @@ interface CanvasHostProps {
     worldY: number;
     elementId: string | null;
   }) => void;
+  onEditorReady?: () => void;
   readOnly?: boolean;
 }
 
@@ -26,6 +27,7 @@ export function CanvasHost({
   onExportRequest,
   onShortcutsRequest,
   onCommentPlace,
+  onEditorReady,
   readOnly = false,
 }: CanvasHostProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -78,6 +80,7 @@ export function CanvasHost({
       (window as unknown as { __ROUGH_EDITOR__?: Editor }).__ROUGH_EDITOR__ = editor;
       setCurrentPageId(editor.getCurrentPageId());
       setPanelsVisible(editor.getPanelsVisible());
+      onEditorReady?.();
     };
 
     void init();
@@ -100,6 +103,7 @@ export function CanvasHost({
     onExportRequest,
     onShortcutsRequest,
     onCommentPlace,
+    onEditorReady,
     readOnly,
   ]);
 
