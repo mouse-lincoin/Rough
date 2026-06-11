@@ -141,6 +141,12 @@ export function remapComponentIds(
   };
 }
 
+const OVERRIDABLE_PATCH_KEYS = new Set(['text', 'fills', 'strokes', 'visible', 'opacity']);
+
+export function getBlockedOverrideKeys(patch: Record<string, unknown>): string[] {
+  return Object.keys(patch).filter((key) => !OVERRIDABLE_PATCH_KEYS.has(key));
+}
+
 export function componentHash(def: ComponentDef): string {
   const payload = JSON.stringify({ name: def.name, elements: def.elements });
   let hash = 0;

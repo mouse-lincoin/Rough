@@ -944,9 +944,9 @@ WS     /collab/:documentId?token=   # Hocuspocus
 | 文档层(Yjs/撤销/本地持久化)§5、§8.9、§11 | ✅ 达标(load 时 schema 迁移已接) |
 | 图层/属性/页面面板 §8.1-§8.3 | ✅ 主干达标(属性面板部分分区缩水) |
 | 箭头绑定 §8.4、编组/Frame 嵌套 §8.5 | ✅ 主干达标 |
-| Auto Layout §8.6 | ⚠️ 求解器正确,交互与 justifyContent 有缺口 |
-| 组件系统 §8.7、线框组件库 §8.8 | ✅ 达标(22 个组件齐全) |
-| 导出 §8.11 | ✅ 五格式齐全(SVG 覆盖部分图形) |
+| Auto Layout §8.6 | ✅ 达标(justifyContent/hug/布局内重排/sizing UI) |
+| 组件系统 §8.7、线框组件库 §8.8 | ✅ 达标(创建自动包 Frame;删主组件自动 Detach) |
+| 导出 §8.11 | ✅ 五格式齐全(SVG 含 path/polygon/arrow) |
 | 协作 §9 | ✅ 主编辑器已接入(光标插值/跟随模式未做) |
 | 后端 §10 | ✅ REST/DB/S3 齐全(前端走 DEV_AUTH 开发登录) |
 | 评论 §8.10 | ✅ 锚点/浮层/跳转已接通(删除元素退化已修;遗留孤儿 elementId 仍可能跳位) |
@@ -966,16 +966,16 @@ WS     /collab/:documentId?token=   # Hocuspocus
 | ~~7~~ | ~~P1~~ | 吸附 | ~~等间距/resize 吸附~~ ✅ 等间距标注 + resize 吸附 | §7.5 | `snapping.ts`, `SelectTool.ts` |
 | ~~8~~ | ~~P1~~ | 变换 | ~~多选/Alt/方向键/文本 resize~~ ✅ 已修 | §7.4 | `SelectTool.ts`, `overlay.ts` |
 | ~~9~~ | ~~P1~~ | 属性面板 | ~~填充/描边/圆角/拖拽改值~~ ✅ 已修 | §8.2 | `PropertiesPanel.tsx` |
-| 10 | P1 | Auto Layout | `justifyContent` 未参与求解;布局内拖拽重排未做;Frame hug 不写回;sizing 无 UI | §8.6 | `autoLayout.ts`, `PropertiesPanel.tsx` |
-| 11 | P1 | 组件 | 删主组件不自动 Detach;创建不支持自动包 Frame;非白名单 override 静默忽略 | §8.7 | `componentCommands.ts`, `PropertiesPanel.tsx` |
-| 12 | P1 | 页面/组件库 | 页面列表无拖拽排序;线框组件「拖入」实为点击固定落点 | §8.3/§8.8 | `PagesPanel.tsx`, `ComponentsPanel.tsx` |
-| 13 | P1 | 导出 | SVG 不支持 path / polygon / arrow | §8.11 | `export/svg.ts` |
+| ~~10~~ | ~~P1~~ | Auto Layout | ~~justifyContent/重排/hug/sizing UI~~ ✅ 已修 | §8.6 | `autoLayout.ts`, `SelectTool.ts`, `PropertiesPanel.tsx` |
+| ~~11~~ | ~~P1~~ | 组件 | ~~Detach/包 Frame/override 提示~~ ✅ 已修 | §8.7 | `componentCommands.ts`, `Editor.ts` |
+| ~~12~~ | ~~P1~~ | 页面/组件库 | ~~页面拖拽排序;组件拖放到画布~~ ✅ 已修 | §8.3/§8.8 | `PagesPanel.tsx`, `ComponentsPanel.tsx`, `CanvasHost.tsx` |
+| ~~13~~ | ~~P1~~ | 导出 | ~~SVG path/polygon/arrow~~ ✅ 已修 | §8.11 | `export/svg.ts` |
 | 14 | P2 | 协作 | 连接失败无重试;徽章不反映 WS 状态;无头像列表/跟随;光标无插值 | §9.2 | `useEditorCollab.ts`, `overlay.ts` |
 | 15 | P2 | 云同步 | 登录迁移非原子;失败无逐文档容错;缩略图未上传云端 | §11 | `cloudSync.ts`, `thumbnailStore.ts` |
 | 16 | P2 | 后端 | GitHub OAuth 回调页未做;快照无 50 版历史;compose 缺 web;WS 独立端口 | §9.1/§10 | `apps/server/`, `docker-compose.yml` |
 | 17 | P2 | 测试 | E2E 经 `__ROUGH_E2E__` 桥,未覆盖真实键鼠;无性能回归自动化 | §12/§13 | `e2eBridge.ts`, `e2e/tests/` |
 
-**建议迭代顺序**:~~P0 #1–#4~~ ✅ 已完成 → P1 #5–#9(核心编辑体验) → P1 #10–#13(布局/组件/导出) → P2 #14–#17(协作/工程)。
+**建议迭代顺序**:~~P0 #1–#4~~ ✅ → ~~P1 #5–#13~~ ✅ → **P2 #14–#17**(协作/工程)。
 
 #### 正确性问题(P0)
 
@@ -986,15 +986,15 @@ WS     /collab/:documentId?token=   # Hocuspocus
 
 #### 功能缺口(P1)
 
-5. 效果渲染:`Effect`(drop-shadow / layer-blur)有数据模型,渲染器与属性面板均未实现(§5.2/§8.2)。
-6. 箭头:线上 `label` 字段未渲染;`orthogonal` 折线路由未实现;吸附时无目标高亮(§8.4)。
-7. 吸附:等间距检测与间距标注未做;resize 过程不吸附(§7.5)。
-8. 变换:多选无变换手柄;Alt+拖拽复制、方向键微移未实现;文本 resize 不切 auto-height(§7.4)。
-9. 属性面板:填充仅 solid(hachure/image 未接 UI)、描边无颜色/线型、圆角无四角独立、无拖拽标签改值(§8.2)。
-10. Auto Layout:`justifyContent` 未参与求解;布局内拖拽重排(插入指示线)未做;Frame hug 尺寸不写回;子项 sizing 无 UI(§8.6)。
-11. 组件:删除主组件不会自动 Detach 实例(会产生孤儿实例);创建组件不支持自动包 Frame;非白名单 override 静默忽略而非提示 Detach(§8.7)。
-12. 页面列表无拖拽排序(API 已有);线框组件「拖入」实为点击固定落点(§8.3/§8.8)。
-13. SVG 导出不支持 path/polygon/arrow 图形(§8.11)。
+5. ~~效果渲染~~ ✅ **已修(v1.1.2)**:Canvas `drop-shadow`/`layer-blur` 渲染 + 属性面板开关。
+6. ~~箭头~~ ✅ **已修(v1.1.2)**:`label` 渲染、`orthogonal` 路由(默认)、吸附目标高亮。
+7. ~~吸附~~ ✅ **已修(v1.1.2)**:等间距标注;resize 过程吸附。
+8. ~~变换~~ ✅ **已修(v1.1.2)**:多选合并 AABB 缩放手柄;Alt+拖拽复制;方向键微移;文本 resize 切 `auto-height`。
+9. ~~属性面板~~ ✅ **已修(v1.1.2)**:solid/hachure/image 填充、描边颜色/线型、四角独立圆角、标签拖拽改值。
+10. ~~Auto Layout~~ ✅ **已修(v1.1.3)**:justifyContent 参与求解;布局内拖拽重排+插入线;Frame hug 写回;sizing UI。
+11. ~~组件~~ ✅ **已修(v1.1.3)**:删主组件自动 Detach;多选自动包 Frame;非白名单 override Toast 提示 Detach。
+12. ~~页面/组件库~~ ✅ **已修(v1.1.3)**:页面拖拽排序;线框组件拖放到画布坐标。
+13. ~~SVG 导出~~ ✅ **已修(v1.1.3)**:支持 path/polygon/arrow(含手绘与箭头端点/标签)。
 
 #### 工程与体验(P2)
 

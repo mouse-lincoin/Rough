@@ -122,4 +122,28 @@ describe('applyLayoutToDocument', () => {
     expect(child?.x).toBe(0);
     expect(child?.y).toBe(0);
   });
+
+  it('writes hug frame size back to document', () => {
+    const f = frame('f', 10, 10);
+    f.layoutChild = { sizingX: 'hug', sizingY: 'hug' };
+    const a = rect('a', 'f', 0, 0, 60, 30);
+    const b = rect('b', 'f', 0, 0, 40, 20);
+    const elements = { f, a, b };
+    const updated = applyLayoutToDocument(elements);
+    const nextFrame = updated.find((e) => e.id === 'f');
+    expect(nextFrame?.width).toBe(110);
+    expect(nextFrame?.height).toBe(30);
+  });
+});
+
+describe('justifyContent', () => {
+  it('centers children on main axis', () => {
+    const f = frame('f', 200, 60);
+    f.autoLayout!.justifyContent = 'center';
+    const a = rect('a', 'f', 0, 0, 40, 30);
+    const b = rect('b', 'f', 0, 0, 40, 30);
+    const layouts = solveLayout(f, [a, b], { f, a, b }, defaultMeasurer);
+    expect(layouts.get('a')?.x).toBe(55);
+    expect(layouts.get('b')?.x).toBe(105);
+  });
 });

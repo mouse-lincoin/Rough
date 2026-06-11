@@ -1,7 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { DocumentStore } from '@rough/document';
 import { Editor, type EditorCallbacks } from '@rough/editor';
+import { createKitComponent, type KitComponentId } from '@rough/wireframe-kit';
 import { useEditorStore } from '../stores/editorStore';
+
+export const ROUGH_KIT_MIME = 'application/x-rough-kit';
 import { attachE2EBridge } from '../e2eBridge';
 
 interface CanvasHostProps {
@@ -40,6 +43,7 @@ export function CanvasHost({
   const bumpDocumentVersion = useEditorStore((s) => s.bumpDocumentVersion);
   const setCurrentPageId = useEditorStore((s) => s.setCurrentPageId);
   const setPanelsVisible = useEditorStore((s) => s.setPanelsVisible);
+  const showToast = useEditorStore((s) => s.showToast);
 
   const hostCallbacksRef = useRef<EditorCallbacks & { onEditorReady?: () => void }>({});
   hostCallbacksRef.current = {
@@ -86,6 +90,7 @@ export function CanvasHost({
           onCommentPlace: (anchor) => hostCallbacksRef.current.onCommentPlace?.(anchor),
           onCommentPinClick: (id, screen) =>
             hostCallbacksRef.current.onCommentPinClick?.(id, screen),
+          onToast: (message) => showToast(message),
         },
       });
 
@@ -120,8 +125,35 @@ export function CanvasHost({
     readOnly,
   ]);
 
+  const handleDragOver = (e: React.DragEvent): void => {
+    if (e.dataTransfer.types.includes(ROUGH_KIT_MIME)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent): void => {
+    const kitId = e.dataTransfer.getData(ROUGH_KIT_MIME);
+    if (!kitId || !editorRef.current || !containerRef.current) return;
+    e.preventDefault();
+    const rect = containerRef.current.getBoundingClientRect();
+    const world = editorRef.current.viewport.screenToWorld({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    });
+    const def = createKitComponent(kitId as KitComponentId);
+    const id = editorRef.current.instantiateComponentAt(def, world.x, world.y);
+    if (id) bumpDocumentVersion();
+  };
+
   return (
-    <div ref={containerRef} className="canvas-host" data-testid="canvas-host">
+    <div
+      ref={containerRef}
+      className="canvas-host"
+      data-testid="canvas-host"
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <canvas ref={mainCanvasRef} className="canvas-main" />
       <canvas ref={overlayCanvasRef} className="canvas-overlay" />
     </div>

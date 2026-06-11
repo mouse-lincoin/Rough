@@ -647,6 +647,31 @@ body,
   color: #6965db;
 }
 
+.components-list-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.components-list-row .components-item {
+  flex: 1;
+}
+
+.editor-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: rgba(26, 26, 26, 0.92);
+  color: #fff;
+  font-size: 13px;
+  pointer-events: none;
+}
+
 .prop-field-full {
   width: 100%;
   margin-bottom: 6px;

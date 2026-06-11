@@ -127,6 +127,13 @@ export function PropertiesPanel({ editorRef }: PropertiesPanelProps): JSX.Elemen
   const shadowEffect = elements[0].effects.find((e) => e.type === 'drop-shadow');
   const isRect = elements.every((e) => e.type === 'rectangle');
   const corner0 = isRect ? (elements[0] as RectangleElement).cornerRadius : 0;
+  const parentEl = elements[0]?.parentId
+    ? editorRef.current?.document.getElement(elements[0].parentId)
+    : null;
+  const inAutoLayoutParent =
+    parentEl?.type === 'frame' && !!parentEl.autoLayout && elements.every((e) => e.parentId === elements[0].parentId);
+  const sizingX = elements[0].layoutChild?.sizingX ?? 'fixed';
+  const sizingY = elements[0].layoutChild?.sizingY ?? 'fixed';
   const cornerExpanded = isRect && Array.isArray(corner0) && corner0.length === 4;
 
   const isText = elements.every((e) => e.type === 'text');
@@ -311,8 +318,117 @@ export function PropertiesPanel({ editorRef }: PropertiesPanelProps): JSX.Elemen
                   } as Partial<Element>);
                 }}
               />
+              <label className="prop-label">
+                方向
+                <select
+                  className="prop-input"
+                  value={elements[0].autoLayout.direction}
+                  onChange={(e) => {
+                    updateAll({
+                      autoLayout: {
+                        ...elements[0].autoLayout!,
+                        direction: e.target.value as 'horizontal' | 'vertical',
+                      },
+                    } as Partial<Element>);
+                  }}
+                >
+                  <option value="horizontal">水平</option>
+                  <option value="vertical">垂直</option>
+                </select>
+              </label>
+              <label className="prop-label">
+                主轴对齐
+                <select
+                  className="prop-input"
+                  value={elements[0].autoLayout.justifyContent}
+                  onChange={(e) => {
+                    updateAll({
+                      autoLayout: {
+                        ...elements[0].autoLayout!,
+                        justifyContent: e.target.value as
+                          | 'start'
+                          | 'center'
+                          | 'end'
+                          | 'space-between',
+                      },
+                    } as Partial<Element>);
+                  }}
+                >
+                  <option value="start">起始</option>
+                  <option value="center">居中</option>
+                  <option value="end">末尾</option>
+                  <option value="space-between">两端对齐</option>
+                </select>
+              </label>
+              <label className="prop-label">
+                交叉轴对齐
+                <select
+                  className="prop-input"
+                  value={elements[0].autoLayout.alignItems}
+                  onChange={(e) => {
+                    updateAll({
+                      autoLayout: {
+                        ...elements[0].autoLayout!,
+                        alignItems: e.target.value as 'start' | 'center' | 'end',
+                      },
+                    } as Partial<Element>);
+                  }}
+                >
+                  <option value="start">起始</option>
+                  <option value="center">居中</option>
+                  <option value="end">末尾</option>
+                </select>
+              </label>
             </div>
           )}
+        </section>
+      )}
+
+      {inAutoLayoutParent && (
+        <section className="prop-section">
+          <div className="prop-section-title">布局子项</div>
+          <div className="prop-grid">
+            <label className="prop-label">
+              宽度
+              <select
+                className="prop-input"
+                value={sizingX}
+                onChange={(e) => {
+                  const sizing = e.target.value as 'fixed' | 'hug' | 'fill';
+                  updateAll({
+                    layoutChild: {
+                      sizingX: sizing,
+                      sizingY: elements[0].layoutChild?.sizingY ?? 'fixed',
+                    },
+                  } as Partial<Element>);
+                }}
+              >
+                <option value="fixed">固定</option>
+                <option value="hug">适应</option>
+                <option value="fill">填充</option>
+              </select>
+            </label>
+            <label className="prop-label">
+              高度
+              <select
+                className="prop-input"
+                value={sizingY}
+                onChange={(e) => {
+                  const sizing = e.target.value as 'fixed' | 'hug' | 'fill';
+                  updateAll({
+                    layoutChild: {
+                      sizingX: elements[0].layoutChild?.sizingX ?? 'fixed',
+                      sizingY: sizing,
+                    },
+                  } as Partial<Element>);
+                }}
+              >
+                <option value="fixed">固定</option>
+                <option value="hug">适应</option>
+                <option value="fill">填充</option>
+              </select>
+            </label>
+          </div>
         </section>
       )}
 

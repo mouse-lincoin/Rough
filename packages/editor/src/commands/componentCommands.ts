@@ -10,6 +10,55 @@ import {
 } from '../layout/autoLayout.js';
 import { createFrame } from '../document/elementFactory.js';
 
+export function detachInstanceToElements(
+  store: DocumentStore,
+  instance: InstanceElement,
+): Element[] {
+  const component = store.getComponent(instance.componentId);
+  if (!component) return [];
+
+  const root = component.elements[component.rootId];
+  const scaleX = root && root.width > 0 ? instance.width / root.width : 1;
+  const scaleY = root && root.height > 0 ? instance.height / root.height : 1;
+
+  const idMap = new Map<ID, ID>();
+  for (const innerId of Object.keys(component.elements)) {
+    idMap.set(innerId, innerId === component.rootId ? instance.id : createId());
+  }
+
+  const detached: Element[] = [];
+  for (const [innerId, templateEl] of Object.entries(component.elements)) {
+    const override = instance.overrides[innerId];
+    let el = structuredClone(templateEl);
+    if (override) {
+      if (override.text !== undefined && el.type === 'text') el = { ...el, text: override.text };
+      if (override.fills) el = { ...el, fills: structuredClone(override.fills) };
+      if (override.strokes) el = { ...el, strokes: structuredClone(override.strokes) };
+      if (override.visible !== undefined) el = { ...el, visible: override.visible };
+      if (override.opacity !== undefined) el = { ...el, opacity: override.opacity };
+    }
+
+    const newId = idMap.get(innerId)!;
+    detached.push({
+      ...el,
+      id: newId,
+      parentId:
+        innerId === component.rootId
+          ? instance.parentId
+          : templateEl.parentId
+            ? (idMap.get(templateEl.parentId) ?? instance.id)
+            : instance.parentId,
+      x: instance.x + el.x * scaleX,
+      y: instance.y + el.y * scaleY,
+      width: el.width * scaleX,
+      height: el.height * scaleY,
+      sortKey: innerId === component.rootId ? instance.sortKey : el.sortKey,
+    });
+  }
+
+  return detached;
+}
+
 function collectSubtree(elements: Record<ID, Element>, rootId: ID): Element[] {
   const result: Element[] = [];
   const walk = (id: ID): void => {
@@ -24,9 +73,121 @@ function collectSubtree(elements: Record<ID, Element>, rootId: ID): Element[] {
   return result;
 }
 
+export class CreateComponentFromSelectionCommand implements Command {
+  private inner: CreateComponentCommand | null = null;
+  private wrappedFrameId: ID | null = null;
+  private beforeTargets: Element[] = [];
+
+  constructor(
+    private store: DocumentStore,
+    private selectionIds: ID[],
+  ) {}
+
+  get instanceId(): ID | null {
+    return this.inner?.instanceId ?? null;
+  }
+
+  execute(): void {
+    const elements = this.store.getElements();
+    const targets = this.selectionIds
+      .map((id) => elements[id])
+      .filter((e): e is Element => e !== undefined);
+    if (targets.length === 0) return;
+
+    this.beforeTargets = targets.map((e) => structuredClone(e));
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const el of targets) {
+      minX = Math.min(minX, el.x);
+      minY = Math.min(minY, el.y);
+      maxX = Math.max(maxX, el.x + el.width);
+      maxY = Math.max(maxY, el.y + el.height);
+    }
+
+    const parentId = targets[0].parentId;
+    const defaults = {
+      roughness: 1,
+      roughSeed: Math.floor(Math.random() * 2 ** 31),
+      sortKey: this.store.getNextSortKey(parentId),
+      parentId,
+    };
+    const frame = createFrame(minX, minY, maxX - minX, maxY - minY, defaults);
+    frame.name = '组件';
+    this.wrappedFrameId = frame.id;
+
+    const reparented = targets.map((el) => ({
+      ...el,
+      parentId: frame.id,
+      x: el.x - minX,
+      y: el.y - minY,
+    }));
+
+    this.store.setElement(frame);
+    this.store.setElements(reparented);
+
+    this.inner = new CreateComponentCommand(this.store, frame.id);
+    this.inner.execute();
+  }
+
+  undo(): void {
+    this.inner?.undo();
+    if (this.wrappedFrameId) this.store.removeElement(this.wrappedFrameId);
+    this.store.setElements(this.beforeTargets);
+  }
+}
+
+export class RemoveComponentCommand implements Command {
+  private removedComponent: ComponentDef | null = null;
+  private removedInstances: InstanceElement[] = [];
+  private detachedElements: Element[] = [];
+
+  constructor(
+    private store: DocumentStore,
+    private componentId: ID,
+  ) {}
+
+  execute(): void {
+    const component = this.store.getComponent(this.componentId);
+    if (!component) return;
+    this.removedComponent = structuredClone(component);
+
+    const instances = Object.values(this.store.getElements()).filter(
+      (e): e is InstanceElement => e.type === 'instance' && e.componentId === this.componentId,
+    );
+    this.removedInstances = instances.map((i) => structuredClone(i));
+
+    const detached: Element[] = [];
+    for (const instance of instances) {
+      detached.push(...detachInstanceToElements(this.store, instance));
+      this.store.removeElement(instance.id);
+    }
+    if (detached.length > 0) {
+      this.store.setElements(detached);
+      this.detachedElements = detached;
+    }
+
+    this.store.removeComponent(this.componentId);
+  }
+
+  undo(): void {
+    for (const el of this.detachedElements) {
+      if (!this.removedInstances.some((i) => i.id === el.id)) {
+        this.store.removeElement(el.id);
+      }
+    }
+    if (this.removedComponent) this.store.setComponent(this.removedComponent);
+    for (const instance of this.removedInstances) {
+      this.store.setElement(instance);
+    }
+  }
+}
+
 export class CreateComponentCommand implements Command {
   private componentId: ID | null = null;
-  private instanceId: ID | null = null;
+  instanceId: ID | null = null;
   private removedSubtree: Element[] = [];
 
   constructor(
@@ -181,51 +342,9 @@ export class DetachInstanceCommand implements Command {
     if (!instance || instance.type !== 'instance') return;
     this.before = structuredClone(instance);
 
-    const component = this.store.getComponent(instance.componentId);
-    if (!component) return;
-
-    const root = component.elements[component.rootId];
-    const scaleX = root && root.width > 0 ? instance.width / root.width : 1;
-    const scaleY = root && root.height > 0 ? instance.height / root.height : 1;
-
-    const idMap = new Map<ID, ID>();
-    for (const innerId of Object.keys(component.elements)) {
-      idMap.set(innerId, innerId === component.rootId ? instance.id : createId());
-    }
-
-    const detached: Element[] = [];
-    for (const [innerId, templateEl] of Object.entries(component.elements)) {
-      const override = instance.overrides[innerId];
-      let el = structuredClone(templateEl);
-      if (override) {
-        if (override.text !== undefined && el.type === 'text') el = { ...el, text: override.text };
-        if (override.fills) el = { ...el, fills: structuredClone(override.fills) };
-        if (override.strokes) el = { ...el, strokes: structuredClone(override.strokes) };
-        if (override.visible !== undefined) el = { ...el, visible: override.visible };
-        if (override.opacity !== undefined) el = { ...el, opacity: override.opacity };
-      }
-
-      const newId = idMap.get(innerId)!;
-      detached.push({
-        ...el,
-        id: newId,
-        parentId:
-          innerId === component.rootId
-            ? instance.parentId
-            : templateEl.parentId
-              ? (idMap.get(templateEl.parentId) ?? instance.id)
-              : instance.parentId,
-        x: instance.x + el.x * scaleX,
-        y: instance.y + el.y * scaleY,
-        width: el.width * scaleX,
-        height: el.height * scaleY,
-        sortKey: innerId === component.rootId ? instance.sortKey : el.sortKey,
-      });
-    }
-
-    this.detached = detached;
+    this.detached = detachInstanceToElements(this.store, instance);
     this.store.removeElement(instance.id);
-    this.store.setElements(detached);
+    this.store.setElements(this.detached);
   }
 
   undo(): void {

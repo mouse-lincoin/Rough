@@ -4,6 +4,13 @@ import {
   DeleteElementsCommand,
   UpdateElementsCommand,
 } from '../../commands/ElementCommands.js';
+import { ReorderAutoLayoutCommand } from '../../commands/layoutCommands.js';
+import {
+  applyLayoutToDocument,
+  computeLayoutInsertBefore,
+  computeLayoutInsertLine,
+  reorderAutoLayoutChildren,
+} from '../../layout/autoLayout.js';
 import { findDeepestContainerAtPoint, hitTestPoint, hitTestRect } from '../../interactions/hitTest.js';
 import { collectSubtree } from '../../clipboard/clipboard.js';
 import { getSelectionRoots } from '../../interactions/treeUtils.js';
@@ -19,7 +26,9 @@ import {
   getRotatedWorldCorners,
   getWorldAABB,
   mergeAABB,
+  worldToLocal,
 } from '../../scene/bounds.js';
+import { matApply } from '../../scene/transforms.js';
 import { duplicateElements } from '../../clipboard/clipboard.js';
 import { computeSnapAdjust } from '../../interactions/snapping.js';
 import type { NormalizedPointerEvent, Rect } from '../../types.js';
@@ -42,12 +51,16 @@ export class SelectTool implements Tool {
   private lastWorld = { x: 0, y: 0 };
   private multiResize = false;
   private startMergedBounds = { x: 0, y: 0, width: 0, height: 0 };
+  private layoutReorder: { frameId: ID; draggedIds: ID[] } | null = null;
+  private layoutBeforeSiblingId: ID | null = null;
+  private initialLayoutBeforeSiblingId: ID | null = null;
   constructor(
     private ctx: EditorContext,
     private host?: EditorHost & {
       getGridSnap?: () => boolean;
       setSnapGuides?: (guides: import('../../interactions/snapping.js').SnapGuide[]) => void;
       setDropTargetFrame?: (frameId: import('@rough/schema').ID | null) => void;
+      setLayoutInsertLine?: (line: { start: import('@rough/schema').Vec2; end: import('@rough/schema').Vec2 } | null) => void;
       reparentElementsAtDrop?: (ids: import('@rough/schema').ID[], world: import('@rough/schema').Vec2) => void;
       enterDeepSelection?: (instanceId: import('@rough/schema').ID) => void;
       getDeepInstanceId?: () => import('@rough/schema').ID | null;
@@ -198,6 +211,52 @@ export class SelectTool implements Tool {
 
     const dx = e.world.x - this.dragStartWorld.x;
     const dy = e.world.y - this.dragStartWorld.y;
+
+    if (this.mode === 'move' && this.layoutReorder) {
+      const frame = this.ctx.document.getElement(this.layoutReorder.frameId);
+      const frameNode = this.ctx.sceneGraph.getNode(this.layoutReorder.frameId);
+      if (frame?.type === 'frame' && frame.autoLayout && frameNode) {
+        const localPoint = worldToLocal(frameNode.worldMatrix, e.world) ?? e.world;
+        const siblings = this.ctx.document.getChildren(this.layoutReorder.frameId);
+        const draggedSet = new Set(this.layoutReorder.draggedIds);
+        this.layoutBeforeSiblingId = computeLayoutInsertBefore(
+          frame,
+          siblings,
+          draggedSet,
+          localPoint,
+        );
+        const lineLocal = computeLayoutInsertLine(
+          frame,
+          siblings,
+          this.layoutBeforeSiblingId,
+          draggedSet,
+        );
+        if (lineLocal) {
+          this.host?.setLayoutInsertLine?.({
+            start: matApply(frameNode.worldMatrix, lineLocal.start),
+            end: matApply(frameNode.worldMatrix, lineLocal.end),
+          });
+        } else {
+          this.host?.setLayoutInsertLine?.(null);
+        }
+
+        const elements = this.ctx.document.getElements();
+        const reordered = reorderAutoLayoutChildren(
+          elements,
+          this.layoutReorder.frameId,
+          this.layoutReorder.draggedIds,
+          this.layoutBeforeSiblingId,
+          this.ctx.document,
+        );
+        if (reordered.length > 0) {
+          const merged = { ...elements };
+          for (const el of reordered) merged[el.id] = el;
+          const layoutUpdates = applyLayoutToDocument(merged);
+          this.ctx.updateElementsLive([...reordered, ...layoutUpdates]);
+        }
+      }
+      return;
+    }
 
     if (this.mode === 'move') {
       let snapDx = dx;
@@ -372,8 +431,24 @@ export class SelectTool implements Tool {
     }
 
     const wasMove = this.mode === 'move';
+    const layoutReorder = this.layoutReorder;
 
-    if (this.mode && this.beforeSnapshots.length > 0) {
+    if (wasMove && layoutReorder) {
+      this.host?.setLayoutInsertLine?.(null);
+      if (this.layoutBeforeSiblingId !== this.initialLayoutBeforeSiblingId) {
+        this.ctx.sceneGraph.rebuild(this.ctx.document.getElements());
+        this.ctx.runCommand(
+          new ReorderAutoLayoutCommand(
+            this.ctx.document,
+            layoutReorder.frameId,
+            layoutReorder.draggedIds,
+            this.layoutBeforeSiblingId,
+          ),
+        );
+      } else {
+        this.ctx.rebuildScene();
+      }
+    } else if (this.mode && this.beforeSnapshots.length > 0) {
       const after = this.ctx.selection
         .getIds()
         .map((id) => this.ctx.document.getElement(id))
@@ -403,6 +478,9 @@ export class SelectTool implements Tool {
 
     this.host?.setSnapGuides?.([]);
     this.host?.setDropTargetFrame?.(null);
+    this.layoutReorder = null;
+    this.layoutBeforeSiblingId = null;
+    this.initialLayoutBeforeSiblingId = null;
     this.ctx.setResizingIds(new Set());
     this.mode = null;
     this.activeHandle = null;
@@ -457,6 +535,30 @@ export class SelectTool implements Tool {
       .filter((el): el is Element => el !== undefined)
       .map((el) => structuredClone(el));
     this.dragStartWorld = { ...e.world };
+    this.layoutReorder = null;
+    this.layoutBeforeSiblingId = null;
+    this.initialLayoutBeforeSiblingId = null;
+
+    const roots = getSelectionRoots(
+      this.ctx.document.getElements(),
+      this.ctx.selection.getIds(),
+    );
+    const parentId = this.beforeSnapshots[0]?.parentId ?? null;
+    if (parentId) {
+      const parent = this.ctx.document.getElement(parentId);
+      if (parent?.type === 'frame' && parent.autoLayout) {
+        const allDirectChildren = roots.every((id) => {
+          const el = this.ctx.document.getElement(id);
+          return el?.parentId === parentId;
+        });
+        if (allDirectChildren) {
+          this.layoutReorder = { frameId: parentId, draggedIds: roots };
+          const siblings = this.ctx.document.getChildren(parentId);
+          this.initialLayoutBeforeSiblingId = initialLayoutBeforeSibling(siblings, roots);
+          this.layoutBeforeSiblingId = this.initialLayoutBeforeSiblingId;
+        }
+      }
+    }
   }
 
   cancel(): void {
@@ -489,6 +591,15 @@ function computeMergedLocalBounds(elements: Element[]): {
     maxY = Math.max(maxY, el.y + el.height);
   }
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function initialLayoutBeforeSibling(siblings: Element[], draggedIds: ID[]): ID | null {
+  const draggedSet = new Set(draggedIds);
+  const sorted = [...siblings].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  const firstIdx = sorted.findIndex((s) => draggedSet.has(s.id));
+  if (firstIdx < 0) return null;
+  const remaining = sorted.filter((s) => !draggedSet.has(s.id));
+  return remaining[firstIdx]?.id ?? null;
 }
 
 function scaleElementsInMergedBounds(

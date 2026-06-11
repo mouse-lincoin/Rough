@@ -223,9 +223,11 @@ function EditorPageContent({
   onPaste,
 }: EditorPageContentProps): JSX.Element {
   const { setPendingAnchor, openThread } = useComments();
+  const toastMessage = useEditorStore((s) => s.toastMessage);
 
   return (
     <div className="app" onPaste={onPaste}>
+      {toastMessage && <div className="editor-toast">{toastMessage}</div>}
       <header className="app-header">
         <button type="button" className="btn-back" onClick={onNavigateHome}>
           ← 文档

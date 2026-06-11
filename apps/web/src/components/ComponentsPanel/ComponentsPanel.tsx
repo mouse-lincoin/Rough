@@ -1,10 +1,18 @@
 import { useMemo, useState } from 'react';
 import { KIT_CATEGORIES, createKitComponent, type KitComponentId } from '@rough/wireframe-kit';
 import type { Editor } from '@rough/editor';
+import { ROUGH_KIT_MIME } from '../CanvasHost';
 import { useEditorStore } from '../../stores/editorStore';
 
 interface ComponentsPanelProps {
   editorRef: React.RefObject<Editor | null>;
+}
+
+function insertAtViewportCenter(editor: Editor): { x: number; y: number } | null {
+  const container = document.querySelector('.canvas-host');
+  const rect = container?.getBoundingClientRect();
+  if (!rect) return null;
+  return editor.viewport.screenToWorld({ x: rect.width / 2, y: rect.height / 2 });
 }
 
 export function ComponentsPanel({ editorRef }: ComponentsPanelProps): JSX.Element {
@@ -30,13 +38,26 @@ export function ComponentsPanel({ editorRef }: ComponentsPanelProps): JSX.Elemen
     const editor = editorRef.current;
     if (!editor) return;
     const def = createKitComponent(kitId);
-    const id = editor.instantiateComponentAt(def, 120, 120);
+    const world = insertAtViewportCenter(editor);
+    const x = world?.x ?? 120;
+    const y = world?.y ?? 120;
+    const id = editor.instantiateComponentAt(def, x, y);
     if (id) bumpDocumentVersion();
   };
 
   const handleEditMaster = (componentId: string): void => {
     editorRef.current?.editMasterComponent(componentId);
     bumpDocumentVersion();
+  };
+
+  const handleDeleteComponent = (componentId: string): void => {
+    editorRef.current?.removeComponent(componentId);
+    bumpDocumentVersion();
+  };
+
+  const handleKitDragStart = (kitId: KitComponentId, e: React.DragEvent): void => {
+    e.dataTransfer.setData(ROUGH_KIT_MIME, kitId);
+    e.dataTransfer.effectAllowed = 'copy';
   };
 
   return (
@@ -58,9 +79,17 @@ export function ComponentsPanel({ editorRef }: ComponentsPanelProps): JSX.Elemen
             <div className="prop-section-title">文档组件</div>
             <ul className="components-list">
               {docComponents.map((c) => (
-                <li key={c.id}>
+                <li key={c.id} className="components-list-row">
                   <button type="button" className="components-item" onClick={() => handleEditMaster(c.id)}>
                     {c.name}
+                  </button>
+                  <button
+                    type="button"
+                    className="layer-action-btn"
+                    title="删除主组件"
+                    onClick={() => handleDeleteComponent(c.id)}
+                  >
+                    ×
                   </button>
                 </li>
               ))}
@@ -77,7 +106,7 @@ export function ComponentsPanel({ editorRef }: ComponentsPanelProps): JSX.Elemen
                     type="button"
                     className="components-item"
                     draggable
-                    onDragEnd={() => handleInsert(id)}
+                    onDragStart={(e) => handleKitDragStart(id, e)}
                     onClick={() => handleInsert(id)}
                   >
                     {createKitComponent(id).name}

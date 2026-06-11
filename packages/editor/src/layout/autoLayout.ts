@@ -1,4 +1,4 @@
-import type { Element, FrameElement, ID, TextElement } from '@rough/schema';
+import type { Element, FrameElement, ID, TextElement, Vec2 } from '@rough/schema';
 import { measureTextLayout } from '../text/textMeasure.js';
 
 export interface LayoutRect {
@@ -152,7 +152,8 @@ export function solveLayout(
   if (remaining < 0) remaining = 0;
   const fillSize = fillCount > 0 ? remaining / fillCount : 0;
 
-  let cursor = isHorizontal ? padding.left : padding.top;
+  const placed: Array<{ child: Element; mainSize: number; crossSize: number; crossPos: number }> = [];
+  let contentMain = 0;
 
   for (const e of entries) {
     let mainSize: number;
@@ -169,12 +170,32 @@ export function solveLayout(
       else if (layout.alignItems === 'end') crossPos += innerCross - crossSize;
     }
 
-    const rect: LayoutRect = isHorizontal
-      ? { x: cursor, y: crossPos, width: mainSize, height: crossSize }
-      : { x: crossPos, y: cursor, width: crossSize, height: mainSize };
+    placed.push({ child: e.child, mainSize, crossSize, crossPos });
+    contentMain += mainSize;
+  }
 
-    result.set(e.child.id, rect);
-    cursor += mainSize + layout.gap;
+  if (placed.length > 1) contentMain += layout.gap * (placed.length - 1);
+
+  let gap = layout.gap;
+  let mainStart = isHorizontal ? padding.left : padding.top;
+  const freeMain = innerMain - contentMain;
+
+  if (layout.justifyContent === 'space-between' && placed.length > 1 && freeMain > 0) {
+    gap += freeMain / (placed.length - 1);
+  } else if (layout.justifyContent === 'center' && freeMain > 0) {
+    mainStart += freeMain / 2;
+  } else if (layout.justifyContent === 'end' && freeMain > 0) {
+    mainStart += freeMain;
+  }
+
+  let cursor = mainStart;
+  for (const item of placed) {
+    const rect: LayoutRect = isHorizontal
+      ? { x: cursor, y: item.crossPos, width: item.mainSize, height: item.crossSize }
+      : { x: item.crossPos, y: cursor, width: item.crossSize, height: item.mainSize };
+
+    result.set(item.child.id, rect);
+    cursor += item.mainSize + gap;
   }
 
   return result;
@@ -207,8 +228,135 @@ export function applyLayoutToDocument(
       merged[childId] = next;
       updated.push(next);
     }
+
+    const hugW = getSizing(frame, 'X') === 'hug';
+    const hugH = getSizing(frame, 'Y') === 'hug';
+    if (hugW || hugH) {
+      const currentFrame = merged[frame.id] as FrameElement;
+      const size = computeFrameContentSize(currentFrame, children, merged, measurer);
+      const nextFrame: FrameElement = {
+        ...currentFrame,
+        width: hugW ? size.width : currentFrame.width,
+        height: hugH ? size.height : currentFrame.height,
+      };
+      merged[frame.id] = nextFrame;
+      updated.push(nextFrame);
+    }
   }
 
+  return updated;
+}
+
+export interface LayoutInsertLine {
+  start: Vec2;
+  end: Vec2;
+}
+
+export function computeLayoutInsertBefore(
+  frame: FrameElement,
+  siblings: Element[],
+  draggedIds: Set<ID>,
+  localPoint: Vec2,
+): ID | null {
+  const layout = frame.autoLayout;
+  if (!layout) return null;
+
+  const isHorizontal = layout.direction === 'horizontal';
+  const main = isHorizontal ? localPoint.x : localPoint.y;
+  const others = [...siblings]
+    .filter((s) => !draggedIds.has(s.id))
+    .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+
+  for (const sibling of others) {
+    const edge = isHorizontal ? sibling.x : sibling.y;
+    const size = isHorizontal ? sibling.width : sibling.height;
+    if (main < edge + size / 2) return sibling.id;
+  }
+  return null;
+}
+
+export function computeLayoutInsertLine(
+  frame: FrameElement,
+  siblings: Element[],
+  beforeSiblingId: ID | null,
+  draggedIds: Set<ID>,
+): LayoutInsertLine | null {
+  const layout = frame.autoLayout;
+  if (!layout) return null;
+
+  const isHorizontal = layout.direction === 'horizontal';
+  const padding = layout.padding;
+  const sorted = [...siblings]
+    .filter((s) => !draggedIds.has(s.id))
+    .sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+
+  let position: number;
+  if (beforeSiblingId === null) {
+    const last = sorted[sorted.length - 1];
+    if (!last) {
+      position = isHorizontal ? padding.left : padding.top;
+    } else {
+      position = isHorizontal
+        ? last.x + last.width + layout.gap / 2
+        : last.y + last.height + layout.gap / 2;
+    }
+  } else {
+    const target = sorted.find((s) => s.id === beforeSiblingId);
+    if (!target) return null;
+    position = isHorizontal ? target.x - layout.gap / 2 : target.y - layout.gap / 2;
+  }
+
+  const innerCross = isHorizontal
+    ? frame.height - padding.top - padding.bottom
+    : frame.width - padding.left - padding.right;
+
+  if (isHorizontal) {
+    return {
+      start: { x: position, y: padding.top },
+      end: { x: position, y: padding.top + innerCross },
+    };
+  }
+  return {
+    start: { x: padding.left, y: position },
+    end: { x: padding.left + innerCross, y: position },
+  };
+}
+
+export function reorderAutoLayoutChildren(
+  elements: Record<ID, Element>,
+  frameId: ID,
+  draggedIds: ID[],
+  beforeSiblingId: ID | null,
+  store: { getSortKeyBetween: (beforeId: ID | null, afterId: ID | null, parentId: ID | null) => string },
+): Element[] {
+  const frame = elements[frameId];
+  if (!frame || frame.type !== 'frame' || !frame.autoLayout) return [];
+
+  const draggedSet = new Set(draggedIds);
+  const siblings = Object.values(elements).filter((e) => e.parentId === frameId);
+  const sorted = [...siblings].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  const moving = sorted.filter((s) => draggedSet.has(s.id));
+  const remaining = sorted.filter((s) => !draggedSet.has(s.id));
+
+  const insertIdx =
+    beforeSiblingId === null
+      ? remaining.length
+      : remaining.findIndex((s) => s.id === beforeSiblingId);
+  if (insertIdx < 0) return [];
+
+  const nextOrder = [...remaining];
+  nextOrder.splice(insertIdx, 0, ...moving);
+
+  const updated: Element[] = [];
+  for (let i = 0; i < nextOrder.length; i++) {
+    const prev = i > 0 ? nextOrder[i - 1] : null;
+    const next = i < nextOrder.length - 1 ? nextOrder[i + 1] : null;
+    const el = nextOrder[i];
+    const newSortKey = store.getSortKeyBetween(prev?.id ?? null, next?.id ?? null, frameId);
+    if (newSortKey !== el.sortKey) {
+      updated.push({ ...el, sortKey: newSortKey });
+    }
+  }
   return updated;
 }
 

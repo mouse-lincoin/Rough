@@ -14,6 +14,11 @@ const HANDLE_SIZE = 8;
 const ACCENT = '#6965DB';
 const PIN_SIZE = 28;
 
+export interface LayoutInsertLine {
+  start: Vec2;
+  end: Vec2;
+}
+
 export interface OverlayState {
   selectedIds: Set<ID>;
   marqueeRect: Rect | null;
@@ -21,6 +26,7 @@ export interface OverlayState {
   snapGuides: SnapGuide[];
   dropTargetFrameId: ID | null;
   bindingTargetId: ID | null;
+  layoutInsertLine: LayoutInsertLine | null;
   remotePeers: RemotePeer[];
   currentPageId: ID;
   commentPins: CommentPin[];
@@ -51,6 +57,10 @@ export class OverlayRenderer {
 
     if (state.bindingTargetId) {
       this.drawDropTarget(ctx, sceneGraph, viewport, state.bindingTargetId);
+    }
+
+    if (state.layoutInsertLine) {
+      this.drawLayoutInsertLine(ctx, viewport, state.layoutInsertLine);
     }
 
     if (state.selectedIds.size > 0) {
@@ -163,6 +173,23 @@ export class OverlayRenderer {
       ctx.fillText(name, p.x + 16, p.y + 16);
       ctx.restore();
     }
+  }
+
+  private drawLayoutInsertLine(
+    ctx: CanvasRenderingContext2D,
+    viewport: Viewport,
+    line: LayoutInsertLine,
+  ): void {
+    const a = viewport.worldToScreen(line.start);
+    const b = viewport.worldToScreen(line.end);
+    ctx.save();
+    ctx.strokeStyle = ACCENT;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.restore();
   }
 
   private drawDropTarget(
