@@ -77,14 +77,15 @@ export function LayerPanel({ editorRef }: LayerPanelProps): JSX.Element {
   });
 
   useEffect(() => {
-    if (!editor) return;
+    if (!editorRef.current) return;
     const id = selectedIds[0];
     if (!id) return;
     const idx = rows.findIndex((r) => r.id === id);
     if (idx >= 0) virtualizer.scrollToIndex(idx, { align: 'auto' });
-  }, [selectedIds, rows, editor, virtualizer]);
+  }, [selectedIds, rows, editorRef, virtualizer]);
 
   const handleSelect = (id: ID, e: React.MouseEvent): void => {
+    const editor = editorRef.current;
     if (!editor) return;
     if (e.metaKey || e.ctrlKey) {
       const next = selectedIds.includes(id)

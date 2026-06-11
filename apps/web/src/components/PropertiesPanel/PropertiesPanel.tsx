@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { Editor } from '@rough/editor';
-import type { Element, RGBA, RectangleElement } from '@rough/schema';
+import type { Element, FrameElement, RGBA, RectangleElement, SemanticTag } from '@rough/schema';
 import { useEditorStore } from '../../stores/editorStore';
 
 interface PropertiesPanelProps {
@@ -56,11 +56,20 @@ export function PropertiesPanel({ editorRef }: PropertiesPanelProps): JSX.Elemen
   const documentVersion = useEditorStore((s) => s.documentVersion);
   const bumpDocumentVersion = useEditorStore((s) => s.bumpDocumentVersion);
 
+  const SEMANTIC_TAGS: SemanticTag[] = [
+    'navbar', 'sidebar', 'button', 'input', 'card', 'table', 'heading', 'paragraph',
+    'label', 'search', 'tabs', 'modal', 'toast', 'annotation', 'page',
+  ];
+
   const elements = useMemo(() => {
     const editor = editorRef.current;
     if (!editor) return [];
     return selectedIds
-      .map((id) => editor.document.getElement(id))
+      .map((id) => {
+        const pageEl = editor.document.getElement(id);
+        if (pageEl) return pageEl;
+        return editor.sceneGraph.getNode(id)?.element;
+      })
       .filter((e): e is Element => e !== undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIds, documentVersion, editorRef]);
@@ -104,6 +113,12 @@ export function PropertiesPanel({ editorRef }: PropertiesPanelProps): JSX.Elemen
   const isText = elements.every((e) => e.type === 'text');
   const isRect = elements.every((e) => e.type === 'rectangle');
   const isFrame = elements.every((e) => e.type === 'frame');
+  const isInstance = elements.length === 1 && elements[0].type === 'instance';
+  const instanceEl = isInstance ? elements[0] : null;
+  const masterName =
+    instanceEl?.type === 'instance'
+      ? editorRef.current?.document.getComponent(instanceEl.componentId)?.name
+      : null;
 
   return (
     <div className="panel properties-panel">
@@ -211,8 +226,91 @@ export function PropertiesPanel({ editorRef }: PropertiesPanelProps): JSX.Elemen
             />
             裁剪内容
           </label>
+          <label className="prop-checkbox">
+            <input
+              type="checkbox"
+              checked={elements[0].type === 'frame' && !!elements[0].autoLayout}
+              onChange={(e) => {
+                const frame = elements[0] as FrameElement;
+                updateAll({
+                  autoLayout: e.target.checked
+                    ? frame.autoLayout ?? {
+                        direction: 'horizontal',
+                        gap: 8,
+                        padding: { top: 8, right: 8, bottom: 8, left: 8 },
+                        alignItems: 'start',
+                        justifyContent: 'start',
+                      }
+                    : null,
+                } as Partial<Element>);
+              }}
+            />
+            Auto Layout
+          </label>
+          {elements[0].type === 'frame' && elements[0].autoLayout && (
+            <div className="prop-grid">
+              <PropField
+                label="间距"
+                value={elements[0].autoLayout.gap}
+                onChange={(v) => {
+                  const gap = parseNumInput(v, 8);
+                  updateAll({
+                    autoLayout: { ...elements[0].autoLayout!, gap },
+                  } as Partial<Element>);
+                }}
+              />
+            </div>
+          )}
         </section>
       )}
+
+      {isInstance && instanceEl?.type === 'instance' && (
+        <section className="prop-section">
+          <div className="prop-section-title">实例</div>
+          <p className="panel-subtitle">主组件: {masterName ?? '未知'}</p>
+          <div className="distribute-row">
+            <button
+              type="button"
+              className="align-btn"
+              onClick={() => {
+                editorRef.current?.editMasterComponent(instanceEl.componentId);
+                bumpDocumentVersion();
+              }}
+            >
+              编辑主组件
+            </button>
+            <button
+              type="button"
+              className="align-btn"
+              onClick={() => {
+                editorRef.current?.detachInstance();
+                bumpDocumentVersion();
+              }}
+            >
+              Detach
+            </button>
+          </div>
+        </section>
+      )}
+
+      <section className="prop-section">
+        <div className="prop-section-title">语义</div>
+        <select
+          className="prop-input"
+          value={elements[0].semantic ?? ''}
+          onChange={(e) => {
+            const semantic = (e.target.value || null) as SemanticTag | null;
+            updateAll({ semantic });
+          }}
+        >
+          <option value="">无</option>
+          {SEMANTIC_TAGS.map((tag) => (
+            <option key={tag} value={tag}>
+              {tag}
+            </option>
+          ))}
+        </select>
+      </section>
 
       <section className="prop-section">
         <div className="prop-section-title">填充</div>
@@ -311,6 +409,21 @@ export function PropertiesPanel({ editorRef }: PropertiesPanelProps): JSX.Elemen
       {isText && elements[0].type === 'text' && (
         <section className="prop-section">
           <div className="prop-section-title">文本</div>
+          <label className="prop-field prop-field-full">
+            <span className="prop-label">内容</span>
+            <input
+              className="prop-input"
+              value={elements[0].text}
+              onChange={(e) => {
+                const updated = elements.map((el) => {
+                  if (el.type !== 'text') return el;
+                  return { ...el, text: e.target.value };
+                });
+                editorRef.current?.updateElements(updated);
+                bumpDocumentVersion();
+              }}
+            />
+          </label>
           <PropField
             label="字号"
             value={elements[0].textStyle.fontSize}

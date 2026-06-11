@@ -71,7 +71,7 @@ export class Renderer {
 
     const nodeForceClean = forceClean || resizingIds.has(el.id);
 
-    if (el.type === 'group') {
+    if (el.type === 'group' || el.type === 'instance') {
       const sortedChildren = [...node.children].sort((a, b) => {
         const cmp = a.element.sortKey.localeCompare(b.element.sortKey);
         return cmp !== 0 ? cmp : a.element.id.localeCompare(b.element.id);

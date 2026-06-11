@@ -7,3 +7,13 @@ export { getWorldAABB } from './scene/bounds.js';
 export { hitTestPoint } from './interactions/hitTest.js';
 export { ROUGH_CLIPBOARD_MIME } from './clipboard/clipboard.js';
 export type { AlignType } from './interactions/align.js';
+export { solveLayout, applyLayoutToDocument } from './layout/autoLayout.js';
+export { parseShadowId, shadowId } from './components/instanceExpansion.js';
+export {
+  CreateComponentCommand,
+  InstantiateComponentCommand,
+  DetachInstanceCommand,
+  UpdateComponentCommand,
+  UpdateInstanceOverrideCommand,
+  ApplyAutoLayoutCommand,
+} from './commands/componentCommands.js';

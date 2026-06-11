@@ -3,6 +3,12 @@ export { DocumentUndoManager } from './undo.js';
 export { LOCAL_ORIGIN, PREVIEW_ORIGIN } from './constants.js';
 export { elementToYMap, yMapToElement, applyElementToYMap } from './yjsMapping.js';
 export {
+  componentToYMap,
+  yMapToComponent,
+  applyComponentToYMap,
+  componentsFromYDoc,
+} from './componentMapping.js';
+export {
   listDocuments,
   getDocumentMeta,
   createDocumentMeta,

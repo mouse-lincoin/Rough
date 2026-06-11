@@ -50,6 +50,7 @@ export function CanvasHost({ docId, docName, editorRef }: CanvasHostProps): JSX.
       });
 
       editorRef.current = editor;
+      (window as unknown as { __ROUGH_EDITOR__?: Editor }).__ROUGH_EDITOR__ = editor;
       setCurrentPageId(editor.getCurrentPageId());
       setPanelsVisible(editor.getPanelsVisible());
     };
@@ -60,6 +61,7 @@ export function CanvasHost({ docId, docName, editorRef }: CanvasHostProps): JSX.
       destroyed = true;
       editor?.destroy();
       editorRef.current = null;
+      delete (window as unknown as { __ROUGH_EDITOR__?: Editor }).__ROUGH_EDITOR__;
     };
   }, [
     docId,

@@ -4,9 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "echo 'E2E tests start from Phase 5' && exit 0",
+    "test": "echo 'Run e2e via: pnpm --filter @rough/e2e exec playwright test' && exit 0",
     "lint": "echo 'No lint for e2e yet' && exit 0",
     "build": "echo 'No build for e2e' && exit 0",
     "typecheck": "echo 'No typecheck for e2e' && exit 0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1"
   }
 }
