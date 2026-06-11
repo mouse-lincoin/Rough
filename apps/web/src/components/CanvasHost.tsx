@@ -7,9 +7,10 @@ interface CanvasHostProps {
   docId: string;
   docName: string;
   editorRef: React.MutableRefObject<Editor | null>;
+  onExportRequest?: () => void;
 }
 
-export function CanvasHost({ docId, docName, editorRef }: CanvasHostProps): JSX.Element {
+export function CanvasHost({ docId, docName, editorRef, onExportRequest }: CanvasHostProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const mainCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -46,6 +47,7 @@ export function CanvasHost({ docId, docName, editorRef }: CanvasHostProps): JSX.
           onDocumentChange: bumpDocumentVersion,
           onPageChange: setCurrentPageId,
           onPanelsToggle: setPanelsVisible,
+          onExportRequest,
         },
       });
 
@@ -72,6 +74,7 @@ export function CanvasHost({ docId, docName, editorRef }: CanvasHostProps): JSX.
     bumpDocumentVersion,
     setCurrentPageId,
     setPanelsVisible,
+    onExportRequest,
   ]);
 
   return (

@@ -13,7 +13,19 @@ import { ToolManager } from './input/ToolManager.js';
 import { InputPipeline } from './input/InputPipeline.js';
 import { TextEditorOverlay } from './text/textEditorOverlay.js';
 import { ImageCache } from './render/imageCache.js';
-import type { EditorCallbacks, ToolName } from './types.js';
+import {
+  exportToJson,
+  exportToSvg,
+  generateAiPrompt,
+  inferMarkdown,
+  packPngExports,
+  parseRoughDocument,
+  resolveExportTargets,
+  type AiPromptFramework,
+} from '@rough/export';
+import { getAssetBlob } from '@rough/document';
+import type { ExportContext, EditorCallbacks, ToolName } from './types.js';
+import { renderRootsToPngBlobs } from './export/offscreenRender.js';
 import type { SnapGuide } from './interactions/snapping.js';
 import {
   alignSelection,
@@ -588,6 +600,74 @@ export class Editor implements EditorHost {
     this.textEditor.startEditing(element);
   }
 
+  requestExport(): void {
+    this.callbacks.onExportRequest?.();
+  }
+
+  getExportContext(): ExportContext {
+    const selectionIds = [...this.selection.selectedIds];
+    const elements = this.document.getElements();
+    return {
+      pageId: this.document.getCurrentPageId(),
+      selectionIds,
+      exportTargetIds: resolveExportTargets(elements, selectionIds),
+    };
+  }
+
+  getMarkdownExport(frameIds?: ID[]): string {
+    const ctx = this.getExportContext();
+    const ids = frameIds ?? ctx.exportTargetIds;
+    return inferMarkdown(this.document.getDocument(), ctx.pageId, ids);
+  }
+
+  getAiPromptExport(framework: AiPromptFramework = 'react-tailwind', frameIds?: ID[]): string {
+    return generateAiPrompt(this.getMarkdownExport(frameIds), framework);
+  }
+
+  getJsonExport(): string {
+    return exportToJson(this.document.getDocument());
+  }
+
+  async exportPng(scale: 1 | 2 | 4 = 2): Promise<Blob> {
+    const ctx = this.getExportContext();
+    const doc = this.document.getDocument();
+    const page = doc.pages[ctx.pageId];
+    const files = await renderRootsToPngBlobs({
+      elements: page?.elements ?? {},
+      components: this.document.getComponents(),
+      rootIds: ctx.exportTargetIds,
+      background: page?.background ?? { r: 248, g: 248, b: 244, a: 1 },
+      scale,
+      cleanMode: this.cleanMode,
+      imageCache: this.imageCache,
+    });
+    return packPngExports(files);
+  }
+
+  async exportSvg(): Promise<string> {
+    const ctx = this.getExportContext();
+    const page = this.document.getPage();
+    return exportToSvg(
+      page.elements,
+      ctx.exportTargetIds,
+      this.document.getComponents(),
+      async (assetId) => {
+        const blob = await getAssetBlob(assetId);
+        if (!blob) return null;
+        return blobToDataUrl(blob);
+      },
+    );
+  }
+
+  importJson(json: string): void {
+    const doc = parseRoughDocument(json);
+    this.document.replaceFromRoughDocument(doc);
+    this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
+    this.selection.clear();
+    this.markSceneDirty();
+    this.callbacks.onDocumentChange?.();
+  }
+
   async importImage(file: File, worldX: number, worldY: number): Promise<void> {
     const bitmap = await createImageBitmap(file);
     const ref = await storeAssetBlob(
@@ -616,4 +696,13 @@ export class Editor implements EditorHost {
     this.textEditor.destroy();
     this.document.destroy();
   }
+}
+
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }

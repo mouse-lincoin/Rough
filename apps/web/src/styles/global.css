@@ -584,3 +584,121 @@ body,
   width: 100%;
   margin-bottom: 6px;
 }
+
+.btn-secondary {
+  padding: 6px 12px;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: #f5f5f5;
+}
+
+.export-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.export-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+
+.export-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.export-dialog-header h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.export-dialog-close {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: #666;
+}
+
+.export-dialog-hint {
+  font-size: 12px;
+  color: #666;
+}
+
+.export-dialog-formats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.export-format-btn {
+  padding: 5px 10px;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.export-format-btn.active {
+  border-color: #6965db;
+  color: #6965db;
+  background: rgba(105, 101, 219, 0.08);
+}
+
+.export-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.export-option select {
+  padding: 4px 8px;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.export-preview {
+  width: 100%;
+  min-height: 180px;
+  padding: 8px;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.export-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.export-status {
+  font-size: 12px;
+  color: #6965db;
+}

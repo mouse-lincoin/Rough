@@ -14,6 +14,7 @@
   "dependencies": {
     "@rough/document": "workspace:*",
     "@rough/editor": "workspace:*",
+    "@rough/export": "workspace:*",
     "@rough/schema": "workspace:*",
     "@rough/shared": "workspace:*",
     "@rough/wireframe-kit": "workspace:*",

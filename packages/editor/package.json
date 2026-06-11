@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@rough/document": "workspace:*",
+    "@rough/export": "workspace:*",
     "@rough/schema": "workspace:*",
     "@rough/shared": "workspace:*",
     "lru-cache": "^11.0.2",
