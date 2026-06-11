@@ -18,7 +18,9 @@ export function computeMovedElementInTree(
   const node = sceneGraph.getNode(elementId);
   if (!node) return null;
 
-  const worldPos = matApply(node.worldMatrix, { x: 0, y: 0 });
+  const cx = el.width / 2;
+  const cy = el.height / 2;
+  const worldCenter = matApply(node.worldMatrix, { x: cx, y: cy });
   let newSortKey: string;
   if (beforeSiblingId) {
     const siblings = store.getChildren(newParentId);
@@ -29,15 +31,15 @@ export function computeMovedElementInTree(
     newSortKey = store.getNextSortKey(newParentId);
   }
 
-  let localX = worldPos.x;
-  let localY = worldPos.y;
+  let localX = worldCenter.x - cx;
+  let localY = worldCenter.y - cy;
   if (newParentId) {
     const parentNode = sceneGraph.getNode(newParentId);
     if (parentNode) {
-      const local = worldToLocal(parentNode.worldMatrix, worldPos);
-      if (local) {
-        localX = local.x;
-        localY = local.y;
+      const parentCenter = worldToLocal(parentNode.worldMatrix, worldCenter);
+      if (parentCenter) {
+        localX = parentCenter.x - cx;
+        localY = parentCenter.y - cy;
       }
     }
   }

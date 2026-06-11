@@ -29,4 +29,11 @@ describe('migrateDocument', () => {
     expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(result.id).toBe('doc1');
   });
+
+  it('migrates legacy v0 documents to current version', () => {
+    const doc = createMinimalDoc(0);
+    const result = migrateDocument(doc);
+    expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(result.id).toBe('doc1');
+  });
 });

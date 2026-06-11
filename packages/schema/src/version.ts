@@ -4,7 +4,10 @@ export const CURRENT_SCHEMA_VERSION = 1;
 
 export type MigrationFn = (doc: RoughDocument) => RoughDocument;
 
-const migrations: Record<number, MigrationFn> = {};
+const migrations: Record<number, MigrationFn> = {
+  // v0 (legacy / missing schemaVersion) → v1: normalize version field only
+  1: (doc) => ({ ...doc, schemaVersion: 1 }),
+};
 
 export function migrateDocument(doc: RoughDocument): RoughDocument {
   let current = { ...doc };

@@ -35,7 +35,7 @@ import { renderRootsToPngBlobs } from './export/offscreenRender.js';
 import { AwarenessSync, type RemotePeer } from './collab/AwarenessSync.js';
 import type { CollabOptions } from '@rough/document';
 import type { SnapGuide } from './interactions/snapping.js';
-import { findDeepestContainerAtPoint } from './interactions/hitTest.js';
+import { findDeepestContainerAtPoint, hitTestPoint } from './interactions/hitTest.js';
 import { canReparentTo, getSelectionRoots } from './interactions/treeUtils.js';
 import { collectSubtree } from './clipboard/clipboard.js';
 import {
@@ -758,7 +758,13 @@ export class Editor implements EditorHost {
   }
 
   placeComment(worldX: number, worldY: number): void {
-    const elementId = [...this.selection.selectedIds][0] ?? null;
+    const hit = hitTestPoint(
+      this.sceneGraph,
+      { x: worldX, y: worldY },
+      this.viewport.zoom,
+      this.deepInstanceId,
+    );
+    const elementId = hit?.element.id ?? null;
     let anchorX = worldX;
     let anchorY = worldY;
     if (elementId) {
