@@ -16,6 +16,7 @@ export interface OverlayState {
   marqueeRect: Rect | null;
   transformHandle: HandleType | null;
   snapGuides: SnapGuide[];
+  dropTargetFrameId: ID | null;
   remotePeers: RemotePeer[];
   currentPageId: ID;
 }
@@ -36,6 +37,10 @@ export class OverlayRenderer {
 
     if (state.snapGuides.length > 0) {
       this.drawSnapGuides(ctx, viewport, state.snapGuides);
+    }
+
+    if (state.dropTargetFrameId) {
+      this.drawDropTarget(ctx, sceneGraph, viewport, state.dropTargetFrameId);
     }
 
     if (state.selectedIds.size > 0) {
@@ -97,6 +102,28 @@ export class OverlayRenderer {
       ctx.fillText(name, p.x + 16, p.y + 16);
       ctx.restore();
     }
+  }
+
+  private drawDropTarget(
+    ctx: CanvasRenderingContext2D,
+    sceneGraph: SceneGraph,
+    viewport: Viewport,
+    frameId: ID,
+  ): void {
+    const node = sceneGraph.getNode(frameId);
+    if (!node) return;
+    const aabb = getWorldAABB(node);
+    const rect = aabbToRect(aabb);
+    const tl = viewport.worldToScreen({ x: rect.x, y: rect.y });
+    const br = viewport.worldToScreen({ x: rect.x + rect.width, y: rect.y + rect.height });
+    ctx.save();
+    ctx.strokeStyle = ACCENT;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+    ctx.fillStyle = 'rgba(105, 101, 219, 0.1)';
+    ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+    ctx.restore();
   }
 
   private drawSnapGuides(

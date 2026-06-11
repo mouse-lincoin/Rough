@@ -4,7 +4,9 @@ import {
   DeleteElementsCommand,
   UpdateElementsCommand,
 } from '../../commands/ElementCommands.js';
-import { hitTestPoint, hitTestRect } from '../../interactions/hitTest.js';
+import { findDeepestContainerAtPoint, hitTestPoint, hitTestRect } from '../../interactions/hitTest.js';
+import { collectSubtree } from '../../clipboard/clipboard.js';
+import { getSelectionRoots } from '../../interactions/treeUtils.js';
 import {
   applyResize,
   hitTestHandle,
@@ -28,12 +30,15 @@ export class SelectTool implements Tool {
   private startRotation = 0;
   private marqueeRect: Rect | null = null;
   private marqueeAdditive = false;
+  private lastWorld = { x: 0, y: 0 };
 
   constructor(
     private ctx: EditorContext,
     private host?: EditorHost & {
       getGridSnap?: () => boolean;
       setSnapGuides?: (guides: import('../../interactions/snapping.js').SnapGuide[]) => void;
+      setDropTargetFrame?: (frameId: import('@rough/schema').ID | null) => void;
+      reparentElementsAtDrop?: (ids: import('@rough/schema').ID[], world: import('@rough/schema').Vec2) => void;
       enterDeepSelection?: (instanceId: import('@rough/schema').ID) => void;
       getDeepInstanceId?: () => import('@rough/schema').ID | null;
     },
@@ -146,6 +151,7 @@ export class SelectTool implements Tool {
 
   onPointerMove(e: NormalizedPointerEvent): void {
     if (!this.mode) return;
+    this.lastWorld = { ...e.world };
 
     if (this.mode === 'marquee') {
       const x = Math.min(this.dragStartWorld.x, e.world.x);
@@ -205,6 +211,21 @@ export class SelectTool implements Tool {
         y: el.y + snapDy,
       }));
       this.ctx.updateElementsLive(updated);
+
+      const roots = getSelectionRoots(this.ctx.document.getElements(), this.ctx.selection.getIds());
+      const exclude = new Set<import('@rough/schema').ID>();
+      for (const id of roots) {
+        for (const el of collectSubtree(this.ctx.document.getElements(), [id])) {
+          exclude.add(el.id);
+        }
+      }
+      const target = findDeepestContainerAtPoint(
+        this.ctx.sceneGraph,
+        e.world,
+        this.ctx.viewport.zoom,
+        exclude,
+      );
+      this.host?.setDropTargetFrame?.(target);
       return;
     }
 
@@ -255,6 +276,8 @@ export class SelectTool implements Tool {
       return;
     }
 
+    const wasMove = this.mode === 'move';
+
     if (this.mode && this.beforeSnapshots.length > 0) {
       const after = this.ctx.selection
         .getIds()
@@ -277,10 +300,14 @@ export class SelectTool implements Tool {
       if (changed && after.length > 0) {
         this.ctx.sceneGraph.rebuild(this.ctx.document.getElements());
         this.ctx.runCommand(new UpdateElementsCommand(this.ctx.document, after));
+        if (wasMove) {
+          this.host?.reparentElementsAtDrop?.(this.ctx.selection.getIds(), this.lastWorld);
+        }
       }
     }
 
     this.host?.setSnapGuides?.([]);
+    this.host?.setDropTargetFrame?.(null);
     this.ctx.setResizingIds(new Set());
     this.mode = null;
     this.activeHandle = null;
