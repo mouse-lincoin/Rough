@@ -83,7 +83,7 @@ pnpm dev
 ## 路线图(按能力划分)
 
 - [x] **Phase 0 脚手架**:pnpm monorepo、类型定义、空画布容器、CI
-- [ ] **Phase 1 能画**:画布内核 —— 图形、选择变换、手绘渲染、撤销重做
+- [x] **Phase 1 能画**:画布内核 —— 图形、选择变换、手绘渲染、撤销重做
 - [ ] **Phase 2-3 能编辑**:Yjs 文档化、本地持久化、Frame/文本/图片、图层面板、属性面板、多页面、对齐吸附
 - [ ] **Phase 4 能复用**:Auto Layout、组件与实例、线框组件库
 - [ ] **Phase 5 能落地**:PNG/SVG/JSON/Markdown/AI Prompt 导出
