@@ -27,6 +27,8 @@
 13. [测试要求](#13-测试要求)
 14. [编码规范](#14-编码规范)
 15. [分阶段实施指令(给 LLM)](#15-分阶段实施指令给-llm)
+16. [附录 A — 给 LLM 的生成约定](#附录-a--给-llm-的生成约定)
+17. [附录 B — 实现状态与已知差距](#附录-b--实现状态与已知差距)
 
 ---
 
@@ -951,14 +953,38 @@ WS     /collab/:documentId?token=   # Hocuspocus
 
 ### B.2 已知差距清单(按优先级)
 
-**正确性问题(优先修)**
+> **17 项待办总表**(可直接复制到 Issue / 看板)。`P` = 优先级:P0 正确性 → P1 功能缺口 → P2 工程体验。修复后请同步更新本表与 B.1 模块总评。
+
+| # | P | 模块 | 待办 | 规格 | 关键入口 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | P0 | 评论 | 元素删除后锚点退化:DB 局部坐标被当世界坐标回退渲染 | §8.10 | `commentAnchors.ts`, `CommentsLayer.tsx` |
+| 2 | P0 | 变换/图层 | 旋转元素 reparent 未考虑绕中心旋转,跨容器移动跳位 | §8.1/§8.5 | `treeCommands.ts`, `LayerPanel.tsx` |
+| 3 | P0 | 评论 | `C` 工具绑定当前选中元素,非点击处 hitTest | §7.2 | `Editor.ts` `placeComment`, `CommentTool.ts` |
+| 4 | P0 | 持久化 | `DocumentStore.load` 不执行 schema 迁移,`migrations` 为空 | §11 | `version.ts`, `DocumentStore.ts` |
+| 5 | P1 | 渲染/属性 | `Effect`(drop-shadow / layer-blur)数据模型有,渲染与面板未接 | §5.2/§8.2 | `Renderer.ts`, `PropertiesPanel.tsx` |
+| 6 | P1 | 箭头 | `label` 未渲染;`orthogonal` 路由未做;吸附无目标高亮 | §8.4 | `arrow.ts`, `ArrowTool.ts` |
+| 7 | P1 | 吸附 | 等间距检测与间距标注未做;resize 过程不吸附 | §7.5 | `snapping.ts`, `SelectTool.ts` |
+| 8 | P1 | 变换 | 多选无手柄;Alt+拖拽复制、方向键微移未做;文本 resize 不切 auto-height | §7.4 | `SelectTool.ts`, `transformHandles.ts` |
+| 9 | P1 | 属性面板 | 填充仅 solid;描边无颜色/线型;圆角无四角独立;无拖拽标签改值 | §8.2 | `PropertiesPanel.tsx` |
+| 10 | P1 | Auto Layout | `justifyContent` 未参与求解;布局内拖拽重排未做;Frame hug 不写回;sizing 无 UI | §8.6 | `autoLayout.ts`, `PropertiesPanel.tsx` |
+| 11 | P1 | 组件 | 删主组件不自动 Detach;创建不支持自动包 Frame;非白名单 override 静默忽略 | §8.7 | `componentCommands.ts`, `PropertiesPanel.tsx` |
+| 12 | P1 | 页面/组件库 | 页面列表无拖拽排序;线框组件「拖入」实为点击固定落点 | §8.3/§8.8 | `PagesPanel.tsx`, `ComponentsPanel.tsx` |
+| 13 | P1 | 导出 | SVG 不支持 path / polygon / arrow | §8.11 | `export/svg.ts` |
+| 14 | P2 | 协作 | 连接失败无重试;徽章不反映 WS 状态;无头像列表/跟随;光标无插值 | §9.2 | `useEditorCollab.ts`, `overlay.ts` |
+| 15 | P2 | 云同步 | 登录迁移非原子;失败无逐文档容错;缩略图未上传云端 | §11 | `cloudSync.ts`, `thumbnailStore.ts` |
+| 16 | P2 | 后端 | GitHub OAuth 回调页未做;快照无 50 版历史;compose 缺 web;WS 独立端口 | §9.1/§10 | `apps/server/`, `docker-compose.yml` |
+| 17 | P2 | 测试 | E2E 经 `__ROUGH_E2E__` 桥,未覆盖真实键鼠;无性能回归自动化 | §12/§13 | `e2eBridge.ts`, `e2e/tests/` |
+
+**建议迭代顺序**:P0 #1–#4(正确性) → P1 #5–#9(核心编辑体验) → P1 #10–#13(布局/组件/导出) → P2 #14–#17(协作/工程)。
+
+#### 正确性问题(P0)
 
 1. 评论锚点退化:绑定元素被删除后,DB 中存的元素局部坐标被当作世界坐标回退渲染,锚点会跳位(§8.10 要求退化为 worldPos)。
 2. 旋转元素跨容器移动:reparent 坐标换算未考虑绕中心旋转,旋转非 0 的元素拖入/拖出 Frame 或图层面板跨容器移动时会跳位(§8.1/§8.5)。
 3. 评论放置:`C` 工具绑定的是当前选中元素而非点击处 hitTest 结果(§7.2)。
 4. schema 迁移链:框架存在但 `DocumentStore.load` 不执行迁移,`migrations` 为空(§11);schemaVersion 升级前必须补上。
 
-**功能缺口(规格明确但未实现)**
+#### 功能缺口(P1)
 
 5. 效果渲染:`Effect`(drop-shadow / layer-blur)有数据模型,渲染器与属性面板均未实现(§5.2/§8.2)。
 6. 箭头:线上 `label` 字段未渲染;`orthogonal` 折线路由未实现;吸附时无目标高亮(§8.4)。
@@ -970,7 +996,7 @@ WS     /collab/:documentId?token=   # Hocuspocus
 12. 页面列表无拖拽排序(API 已有);线框组件「拖入」实为点击固定落点(§8.3/§8.8)。
 13. SVG 导出不支持 path/polygon/arrow 图形(§8.11)。
 
-**工程与体验**
+#### 工程与体验(P2)
 
 14. 协作:连接失败静默无重试;顶栏「协作」徽章不反映真实 WS 状态;无协作者头像列表与跟随(spotlight)模式;光标无线性插值(§9.2)。
 15. 云同步:登录迁移非原子(可能产生孤儿云文档);失败无逐文档容错;缩略图未上传云端(§11)。
