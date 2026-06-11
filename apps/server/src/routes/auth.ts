@@ -63,6 +63,13 @@ export async function registerAuthRoutes(
     return { user };
   });
 
+  app.get('/api/v1/collab-token', async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return;
+    const token = signToken(user, config);
+    return { token };
+  });
+
   app.post('/api/v1/auth/logout', async (_request, reply) => {
     clearAuthCookie(reply);
     return { ok: true };

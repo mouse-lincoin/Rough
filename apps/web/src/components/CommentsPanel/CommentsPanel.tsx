@@ -10,6 +10,7 @@ export interface CommentAnchor {
 
 interface CommentsPanelProps {
   documentId: string;
+  cloudEnabled?: boolean;
   shareToken?: string;
   readOnly?: boolean;
   pendingAnchor: CommentAnchor | null;
@@ -18,6 +19,7 @@ interface CommentsPanelProps {
 
 export function CommentsPanel({
   documentId,
+  cloudEnabled = true,
   shareToken,
   readOnly = false,
   pendingAnchor,
@@ -26,12 +28,22 @@ export function CommentsPanel({
   const [comments, setComments] = useState<ApiComment[]>([]);
   const [filter, setFilter] = useState<'all' | 'open'>('open');
   const [draft, setDraft] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    if (!documentId) return;
-    const rows = await fetchComments(documentId, shareToken);
-    setComments(rows);
-  }, [documentId, shareToken]);
+    if (!documentId || !cloudEnabled) {
+      setComments([]);
+      return;
+    }
+    try {
+      setLoadError(null);
+      const rows = await fetchComments(documentId, shareToken);
+      setComments(rows);
+    } catch {
+      setLoadError('无法加载评论');
+      setComments([]);
+    }
+  }, [documentId, shareToken, cloudEnabled]);
 
   useEffect(() => {
     void reload();
@@ -40,7 +52,7 @@ export function CommentsPanel({
   const visible = comments.filter((c) => filter === 'all' || !c.resolvedAt);
 
   const submit = async (): Promise<void> => {
-    if (!pendingAnchor || !draft.trim()) return;
+    if (!pendingAnchor || !draft.trim() || !cloudEnabled) return;
     await createComment(documentId, { ...pendingAnchor, body: draft.trim() });
     setDraft('');
     onClearAnchor();
@@ -56,7 +68,11 @@ export function CommentsPanel({
           <option value="all">全部</option>
         </select>
       </div>
-      {!readOnly && pendingAnchor && (
+      {!cloudEnabled && (
+        <p className="comments-hint">登录并同步文档后可使用评论</p>
+      )}
+      {loadError && <p className="comments-hint">{loadError}</p>}
+      {!readOnly && cloudEnabled && pendingAnchor && (
         <div className="comment-compose">
           <textarea
             value={draft}

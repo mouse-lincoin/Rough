@@ -14,10 +14,19 @@ export {
   getDocumentMeta,
   createDocumentMeta,
   updateDocumentMeta,
+  updateDocumentMetaFields,
+  replaceDocumentMetaId,
+  listUnsyncedDocuments,
   deleteDocumentMeta,
   touchDocumentMeta,
   type DocumentMeta,
 } from './metaStore.js';
+export {
+  encodeLocalDocumentSnapshot,
+  rekeyLocalDocument,
+  markDocumentSynced,
+  isCloudSynced,
+} from './cloudMigration.js';
 export { storeAssetBlob, getAssetBlob, deleteDocumentAssets } from './assetStore.js';
 export {
   saveDocumentThumbnail,

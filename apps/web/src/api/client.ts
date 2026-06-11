@@ -63,6 +63,43 @@ export async function logout(): Promise<void> {
   await request('/api/v1/auth/logout', { method: 'POST' });
 }
 
+export async function getCollabToken(): Promise<string> {
+  const data = await request<{ token: string }>('/api/v1/collab-token');
+  return data.token;
+}
+
+export interface ApiDocument {
+  id: string;
+  name: string;
+  schemaVersion: number;
+  thumbnailKey: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function createCloudDocument(
+  name: string,
+  snapshotBase64?: string,
+): Promise<ApiDocument> {
+  const data = await request<{ document: ApiDocument }>('/api/v1/documents', {
+    method: 'POST',
+    body: JSON.stringify({ name, snapshot: snapshotBase64 }),
+  });
+  return data.document;
+}
+
+export async function patchCloudDocument(id: string, name: string): Promise<ApiDocument> {
+  const data = await request<{ document: ApiDocument }>(`/api/v1/documents/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+  return data.document;
+}
+
+export async function deleteCloudDocument(id: string): Promise<void> {
+  await request(`/api/v1/documents/${id}`, { method: 'DELETE' });
+}
+
 export async function createShareLink(
   documentId: string,
   mode: 'view' | 'edit',

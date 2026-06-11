@@ -124,6 +124,35 @@ body,
   border-bottom: 1px solid #e5e5e5;
 }
 
+.doc-list-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.doc-sync-badge {
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-size: 11px;
+  color: #8a6d3b;
+  background: #fff8e6;
+  border-radius: 4px;
+}
+
+.collab-status {
+  padding: 2px 8px;
+  font-size: 12px;
+  color: #1a7f37;
+  background: #e6f4ea;
+  border-radius: 4px;
+}
+
+.comments-hint {
+  margin: 8px 12px;
+  font-size: 12px;
+  color: #888;
+}
+
 .doc-list-main {
   flex: 1;
   overflow: auto;

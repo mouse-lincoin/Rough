@@ -4,9 +4,14 @@ import {
   createDocumentMeta,
   deleteDocumentMeta,
   getDocumentThumbnail,
+  isCloudSynced,
   listDocuments,
   type DocumentMeta,
 } from '@rough/document';
+import { deleteCloudDocument } from '../api/client';
+import { AuthButton } from '../components/AuthButton/AuthButton';
+import { createSyncedDocument } from '../services/cloudSync';
+import { useAuthStore } from '../stores/authStore';
 
 interface DocWithThumb extends DocumentMeta {
   thumbnail: string | null;
@@ -17,6 +22,14 @@ export function DocumentListPage(): JSX.Element {
   const [docs, setDocs] = useState<DocWithThumb[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const user = useAuthStore((s) => s.user);
+  const lastMigrations = useAuthStore((s) => s.lastMigrations);
+  const authInit = useAuthStore((s) => s.init);
+  const authInitialized = useAuthStore((s) => s.initialized);
+
+  useEffect(() => {
+    if (!authInitialized) void authInit();
+  }, [authInitialized, authInit]);
 
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -40,22 +53,25 @@ export function DocumentListPage(): JSX.Element {
 
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+  }, [refresh, lastMigrations]);
 
   const handleCreate = async (): Promise<void> => {
     try {
-      const meta = await createDocumentMeta('未命名');
+      const meta = user ? await createSyncedDocument('未命名') : await createDocumentMeta('未命名');
       navigate(`/doc/${meta.id}`);
     } catch {
       setError('创建文档失败');
     }
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent): Promise<void> => {
+  const handleDelete = async (doc: DocWithThumb, e: React.MouseEvent): Promise<void> => {
     e.stopPropagation();
     if (!confirm('确定删除此文档？')) return;
     try {
-      await deleteDocumentMeta(id);
+      if (isCloudSynced(doc)) {
+        await deleteCloudDocument(doc.id).catch(() => undefined);
+      }
+      await deleteDocumentMeta(doc.id);
       await refresh();
     } catch {
       setError('删除失败');
@@ -66,9 +82,12 @@ export function DocumentListPage(): JSX.Element {
     <div className="doc-list-page">
       <header className="doc-list-header">
         <span className="app-logo">Rough</span>
-        <button type="button" className="btn-primary" data-testid="create-doc" onClick={() => void handleCreate()}>
-          新建文档
-        </button>
+        <div className="doc-list-header-actions">
+          <AuthButton />
+          <button type="button" className="btn-primary" data-testid="create-doc" onClick={() => void handleCreate()}>
+            新建文档
+          </button>
+        </div>
       </header>
       <main className="doc-list-main">
         {loading ? (
@@ -105,7 +124,12 @@ export function DocumentListPage(): JSX.Element {
                     )}
                   </div>
                   <div className="doc-list-meta">
-                    <span className="doc-list-name">{doc.name}</span>
+                    <span className="doc-list-name">
+                      {doc.name}
+                      {!isCloudSynced(doc) && user && (
+                        <span className="doc-sync-badge" title="尚未同步到云端">本地</span>
+                      )}
+                    </span>
                     <span className="doc-list-date">
                       {new Date(doc.updatedAt).toLocaleString('zh-CN')}
                     </span>
@@ -113,7 +137,7 @@ export function DocumentListPage(): JSX.Element {
                   <button
                     type="button"
                     className="doc-list-delete"
-                    onClick={(e) => void handleDelete(doc.id, e)}
+                    onClick={(e) => void handleDelete(doc, e)}
                     title="删除"
                   >
                     ×
