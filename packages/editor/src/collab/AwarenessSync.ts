@@ -74,6 +74,38 @@ export class AwarenessSync {
     });
   }
 
+  broadcastCommentEvent(event: 'created' | 'updated'): void {
+    const awareness = this.document.getCollabAwareness();
+    if (!awareness) return;
+    const current = awareness.getLocalState() as AwarenessUserState | null;
+    awareness.setLocalState({
+      ...current,
+      user: current?.user,
+      cursor: current?.cursor ?? null,
+      selection: current?.selection ?? [],
+      viewport: current?.viewport ?? { offset: { ...this.viewport.offset }, zoom: this.viewport.zoom },
+      pageId: current?.pageId ?? '',
+      commentEvent: { type: event, at: Date.now() },
+    });
+  }
+
+  onCommentEvent(handler: (event: { type: 'created' | 'updated'; at: number }) => void): () => void {
+    const awareness = this.document.getCollabAwareness();
+    if (!awareness) return () => {};
+
+    const onChange = (): void => {
+      awareness.getStates().forEach((state, clientId) => {
+        if (clientId === awareness.clientID) return;
+        const ev = (state as AwarenessUserState & { commentEvent?: { type: 'created' | 'updated'; at: number } })
+          ?.commentEvent;
+        if (ev) handler(ev);
+      });
+    };
+
+    awareness.on('change', onChange);
+    return () => awareness.off('change', onChange);
+  }
+
   destroy(): void {
     this.unsubscribe?.();
     this.unsubscribe = null;

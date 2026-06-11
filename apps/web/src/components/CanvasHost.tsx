@@ -16,6 +16,7 @@ interface CanvasHostProps {
     worldY: number;
     elementId: string | null;
   }) => void;
+  onCommentPinClick?: (commentId: string, screen: { x: number; y: number }) => void;
   onEditorReady?: () => void;
   readOnly?: boolean;
 }
@@ -27,6 +28,7 @@ export function CanvasHost({
   onExportRequest,
   onShortcutsRequest,
   onCommentPlace,
+  onCommentPinClick,
   onEditorReady,
   readOnly = false,
 }: CanvasHostProps): JSX.Element {
@@ -69,6 +71,7 @@ export function CanvasHost({
           onExportRequest,
           onShortcutsRequest,
           onCommentPlace,
+          onCommentPinClick,
         },
       });
 
@@ -103,6 +106,7 @@ export function CanvasHost({
     onExportRequest,
     onShortcutsRequest,
     onCommentPlace,
+    onCommentPinClick,
     onEditorReady,
     readOnly,
   ]);

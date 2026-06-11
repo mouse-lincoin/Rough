@@ -7,9 +7,12 @@ import type { HandleType } from '../interactions/transformHandles.js';
 import { getHandlePositions } from '../interactions/transformHandles.js';
 import type { SnapGuide } from '../interactions/snapping.js';
 import type { RemotePeer } from '../collab/AwarenessSync.js';
+import { resolveCommentAnchorWorld } from '../comments/commentAnchors.js';
+import type { CommentPin } from '../types.js';
 
 const HANDLE_SIZE = 8;
 const ACCENT = '#6965DB';
+const PIN_SIZE = 28;
 
 export interface OverlayState {
   selectedIds: Set<ID>;
@@ -19,6 +22,8 @@ export interface OverlayState {
   dropTargetFrameId: ID | null;
   remotePeers: RemotePeer[];
   currentPageId: ID;
+  commentPins: CommentPin[];
+  highlightedCommentId: ID | null;
 }
 
 export class OverlayRenderer {
@@ -52,7 +57,58 @@ export class OverlayRenderer {
       this.drawRemotePeer(ctx, sceneGraph, viewport, peer);
     }
 
+    for (const pin of state.commentPins) {
+      if (pin.pageId !== state.currentPageId) continue;
+      this.drawCommentPin(ctx, sceneGraph, viewport, pin, pin.id === state.highlightedCommentId);
+    }
+
     ctx.restore();
+  }
+
+  private drawCommentPin(
+    ctx: CanvasRenderingContext2D,
+    sceneGraph: SceneGraph,
+    viewport: Viewport,
+    pin: CommentPin,
+    highlighted: boolean,
+  ): void {
+    const world = resolveCommentAnchorWorld(sceneGraph, pin);
+    const center = viewport.worldToScreen(world);
+    const r = PIN_SIZE / 2;
+
+    const initial = (pin.authorName?.trim()?.[0] ?? '?').toUpperCase();
+    const fill = pin.resolved ? '#9ca3af' : highlighted ? '#4f46e5' : '#6965DB';
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = highlighted ? '#312e81' : '#ffffff';
+    ctx.lineWidth = highlighted ? 2.5 : 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 12px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(initial, center.x, center.y + 0.5);
+
+    if (pin.resolved) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(center.x - 6, center.y);
+      ctx.lineTo(center.x - 2, center.y + 4);
+      ctx.lineTo(center.x + 6, center.y - 4);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  static pinHitRadius(): number {
+    return PIN_SIZE / 2 + 4;
   }
 
   private drawRemotePeer(

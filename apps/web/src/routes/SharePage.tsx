@@ -2,8 +2,50 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import type { Editor } from '@rough/editor';
 import { CanvasHost } from '../components/CanvasHost';
-import { CommentsPanel, type CommentAnchor } from '../components/CommentsPanel/CommentsPanel';
+import { CommentsPanel } from '../components/CommentsPanel/CommentsPanel';
+import { CommentsProvider, useComments } from '../components/CommentsPanel/commentsContext';
+import { CommentsLayer } from '../components/CommentsPanel/CommentsLayer';
+import { CommentThreadPopover } from '../components/CommentsPanel/CommentThreadPopover';
 import { collabTokenForShare, getCollabUrl, resolveShareToken } from '../api/client';
+
+function SharePageContent({
+  docId,
+  mode,
+  editorRef,
+}: {
+  docId: string;
+  mode: 'view' | 'edit';
+  editorRef: React.MutableRefObject<Editor | null>;
+}): JSX.Element {
+  const { setPendingAnchor, openThread } = useComments();
+  const readOnly = mode === 'view';
+
+  return (
+    <div className="app">
+      <header className="app-header">
+        <span className="app-logo">Rough 分享</span>
+        <span className="share-mode-badge">{mode === 'view' ? '只读' : '可编辑'}</span>
+      </header>
+      <div className="editor-layout">
+        <main className="app-main app-main-canvas">
+          <CanvasHost
+            docId={docId}
+            docName="分享文档"
+            editorRef={editorRef}
+            readOnly={readOnly}
+            onCommentPlace={readOnly ? undefined : setPendingAnchor}
+            onCommentPinClick={(id, screen) => openThread(id, screen)}
+          />
+          <CommentsLayer editorRef={editorRef} />
+          <CommentThreadPopover editorRef={editorRef} />
+        </main>
+        <aside className="editor-sidebar editor-sidebar-right">
+          <CommentsPanel />
+        </aside>
+      </div>
+    </div>
+  );
+}
 
 export function SharePage(): JSX.Element {
   const { token } = useParams<{ token: string }>();
@@ -11,7 +53,6 @@ export function SharePage(): JSX.Element {
   const [docId, setDocId] = useState<string | null>(null);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [error, setError] = useState('');
-  const [commentAnchor, setCommentAnchor] = useState<CommentAnchor | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -41,31 +82,13 @@ export function SharePage(): JSX.Element {
   if (!docId || !token) return <div className="doc-list-empty">加载中…</div>;
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <span className="app-logo">Rough 分享</span>
-        <span className="share-mode-badge">{mode === 'view' ? '只读' : '可编辑'}</span>
-      </header>
-      <div className="editor-layout">
-        <main className="app-main">
-          <CanvasHost
-            docId={docId}
-            docName="分享文档"
-            editorRef={editorRef}
-            readOnly={mode === 'view'}
-            onCommentPlace={mode === 'view' ? undefined : setCommentAnchor}
-          />
-        </main>
-        <aside className="editor-sidebar editor-sidebar-right">
-          <CommentsPanel
-            documentId={docId}
-            shareToken={token}
-            readOnly={mode === 'view'}
-            pendingAnchor={commentAnchor}
-            onClearAnchor={() => setCommentAnchor(null)}
-          />
-        </aside>
-      </div>
-    </div>
+    <CommentsProvider
+      documentId={docId}
+      shareToken={token}
+      readOnly={mode === 'view'}
+      editorRef={editorRef}
+    >
+      <SharePageContent docId={docId} mode={mode} editorRef={editorRef} />
+    </CommentsProvider>
   );
 }

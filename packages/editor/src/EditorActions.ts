@@ -215,6 +215,21 @@ export function fitViewportToContent(
   };
 }
 
+export function fitViewportToPoint(
+  viewport: Viewport,
+  worldX: number,
+  worldY: number,
+  width: number,
+  height: number,
+  targetZoom = 1.25,
+): void {
+  viewport.zoom = Math.min(Math.max(targetZoom, 0.25), 4);
+  viewport.offset = {
+    x: worldX - width / (2 * viewport.zoom),
+    y: worldY - height / (2 * viewport.zoom),
+  };
+}
+
 export function fitViewportToSelection(
   viewport: Viewport,
   sceneGraph: SceneGraph,
