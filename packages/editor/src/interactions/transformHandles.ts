@@ -1,4 +1,6 @@
 import type { Vec2 } from '@rough/schema';
+import type { SceneNode } from '../scene/SceneNode.js';
+import { matInvert } from '../scene/transforms.js';
 
 export type HandleType =
   | 'nw'
@@ -44,6 +46,35 @@ export function hitTestHandle(screen: Vec2, corners: Vec2[]): HandleType | null 
     }
   }
   return null;
+}
+
+/** Project a world-space drag delta into the element's unrotated local axes. */
+export function worldDeltaToElementLocal(node: SceneNode, dx: number, dy: number): Vec2 {
+  let lx = dx;
+  let ly = dy;
+  if (node.parent) {
+    const inv = matInvert(node.parent.worldMatrix);
+    if (inv) {
+      lx = inv[0] * dx + inv[2] * dy;
+      ly = inv[1] * dx + inv[3] * dy;
+    }
+  }
+  const r = -node.element.rotation;
+  const cos = Math.cos(r);
+  const sin = Math.sin(r);
+  return {
+    x: lx * cos - ly * sin,
+    y: lx * sin + ly * cos,
+  };
+}
+
+export function elementLocalBounds(element: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}): { x: number; y: number; width: number; height: number } {
+  return { x: element.x, y: element.y, width: element.width, height: element.height };
 }
 
 export function applyResize(
