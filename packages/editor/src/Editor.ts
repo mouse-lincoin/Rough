@@ -25,7 +25,8 @@ import {
 } from '@rough/export';
 import { getAssetBlob, saveDocumentThumbnail } from '@rough/document';
 import { capturePageThumbnail } from './export/thumbnailCapture.js';
-import type { ExportContext, EditorCallbacks, ToolName } from './types.js';
+import type { CommentPin, ExportContext, EditorCallbacks, ToolName } from './types.js';
+import { resolveCommentAnchorWorld, worldToElementLocal } from './comments/commentAnchors.js';
 import { renderRootsToPngBlobs } from './export/offscreenRender.js';
 import { AwarenessSync, type RemotePeer } from './collab/AwarenessSync.js';
 import type { CollabOptions } from '@rough/document';
@@ -40,6 +41,7 @@ import {
   distributeSelection,
   duplicateSelection,
   fitViewportToContent,
+  fitViewportToPoint,
   fitViewportToSelection,
   getPages,
   groupSelection,
@@ -104,6 +106,8 @@ export class Editor implements EditorHost {
   private awareness: AwarenessSync | null = null;
   private remotePeers: RemotePeer[] = [];
   private thumbnailTimer: ReturnType<typeof setTimeout> | null = null;
+  private commentPins: CommentPin[] = [];
+  private highlightedCommentId: ID | null = null;
 
   constructor(options: EditorOptions) {
     this.callbacks = options.callbacks ?? {};
@@ -236,6 +240,8 @@ export class Editor implements EditorHost {
       dropTargetFrameId: this.dropTargetFrameId,
       remotePeers: this.remotePeers,
       currentPageId: this.document.getCurrentPageId(),
+      commentPins: this.commentPins,
+      highlightedCommentId: this.highlightedCommentId,
     });
   }
 
@@ -699,6 +705,16 @@ export class Editor implements EditorHost {
     this.requestRender();
   }
 
+  broadcastCommentChange(type: 'created' | 'updated'): void {
+    this.awareness?.broadcastCommentEvent(type);
+  }
+
+  onRemoteCommentEvent(
+    handler: (event: { type: 'created' | 'updated'; at: number }) => void,
+  ): () => void {
+    return this.awareness?.onCommentEvent(handler) ?? (() => {});
+  }
+
   publishPointer(world: import('@rough/schema').Vec2): void {
     this.awareness?.publishPointer(world, this.selection.selectedIds, this.document.getCurrentPageId());
   }
@@ -712,12 +728,77 @@ export class Editor implements EditorHost {
   }
 
   placeComment(worldX: number, worldY: number): void {
+    const elementId = [...this.selection.selectedIds][0] ?? null;
+    let anchorX = worldX;
+    let anchorY = worldY;
+    if (elementId) {
+      const local = worldToElementLocal(this.sceneGraph, elementId, { x: worldX, y: worldY });
+      if (local) {
+        anchorX = local.x;
+        anchorY = local.y;
+      }
+    }
     this.callbacks.onCommentPlace?.({
       pageId: this.document.getCurrentPageId(),
-      worldX,
-      worldY,
-      elementId: [...this.selection.selectedIds][0] ?? null,
+      worldX: anchorX,
+      worldY: anchorY,
+      elementId,
     });
+  }
+
+  setCommentPins(pins: CommentPin[]): void {
+    this.commentPins = pins;
+    this.requestRender();
+  }
+
+  setHighlightedCommentId(commentId: ID | null): void {
+    this.highlightedCommentId = commentId;
+    this.requestRender();
+  }
+
+  resolveCommentWorld(anchor: {
+    elementId: ID | null;
+    worldX: number;
+    worldY: number;
+  }): import('@rough/schema').Vec2 {
+    return resolveCommentAnchorWorld(this.sceneGraph, anchor);
+  }
+
+  handleCommentPinClick(commentId: ID, screen: import('@rough/schema').Vec2): void {
+    this.setHighlightedCommentId(commentId);
+    this.callbacks.onCommentPinClick?.(commentId, screen);
+  }
+
+  hitTestCommentPin(screen: import('@rough/schema').Vec2): ID | null {
+    const radius = OverlayRenderer.pinHitRadius();
+    let hit: { id: ID; dist: number } | null = null;
+    const pageId = this.document.getCurrentPageId();
+
+    for (const pin of this.commentPins) {
+      if (pin.pageId !== pageId) continue;
+      const world = resolveCommentAnchorWorld(this.sceneGraph, pin);
+      const p = this.viewport.worldToScreen(world);
+      const dist = Math.hypot(p.x - screen.x, p.y - screen.y);
+      if (dist <= radius && (!hit || dist < hit.dist)) {
+        hit = { id: pin.id, dist };
+      }
+    }
+    return hit?.id ?? null;
+  }
+
+  goToComment(anchor: {
+    pageId: ID;
+    elementId: ID | null;
+    worldX: number;
+    worldY: number;
+  }): void {
+    if (anchor.pageId !== this.document.getCurrentPageId()) {
+      this.switchPage(anchor.pageId);
+    }
+    const world = resolveCommentAnchorWorld(this.sceneGraph, anchor);
+    fitViewportToPoint(this.viewport, world.x, world.y, this.width, this.height);
+    this.markSceneDirty();
+    this.requestRender();
   }
 
   getExportContext(): ExportContext {

@@ -8,6 +8,7 @@ import {
   type DocumentMeta,
 } from '@rough/document';
 import type { Editor } from '@rough/editor';
+import type { ApiUser } from '../api/client';
 import { patchCloudDocument } from '../api/client';
 import { CanvasHost } from '../components/CanvasHost';
 import { Toolbar } from '../components/Toolbar/Toolbar';
@@ -18,7 +19,10 @@ import { ComponentsPanel } from '../components/ComponentsPanel/ComponentsPanel';
 import { ExportDialog } from '../components/ExportDialog/ExportDialog';
 import { ShareDialog } from '../components/ShareDialog/ShareDialog';
 import { AuthButton } from '../components/AuthButton/AuthButton';
-import { CommentsPanel, type CommentAnchor } from '../components/CommentsPanel/CommentsPanel';
+import { CommentsPanel } from '../components/CommentsPanel/CommentsPanel';
+import { CommentsProvider, useComments } from '../components/CommentsPanel/commentsContext';
+import { CommentsLayer } from '../components/CommentsPanel/CommentsLayer';
+import { CommentThreadPopover } from '../components/CommentsPanel/CommentThreadPopover';
 import { ShortcutsHelp } from '../components/ShortcutsHelp/ShortcutsHelp';
 import { useEditorCollab } from '../hooks/useEditorCollab';
 import { getCloudDocumentId } from '../services/cloudSync';
@@ -36,7 +40,6 @@ export function EditorPage(): JSX.Element {
   const [exportOpen, setExportOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [commentAnchor, setCommentAnchor] = useState<CommentAnchor | null>(null);
   const panelsVisible = useEditorStore((s) => s.panelsVisible);
   const user = useAuthStore((s) => s.user);
   const lastMigrations = useAuthStore((s) => s.lastMigrations);
@@ -146,16 +149,92 @@ export function EditorPage(): JSX.Element {
   }
 
   return (
-    <div className="app" onPaste={handlePaste}>
+    <CommentsProvider
+      documentId={cloudDocumentId ?? docId}
+      cloudEnabled={cloudDocumentId != null}
+      editorRef={editorRef}
+    >
+      <EditorPageContent
+        docId={docId}
+        docName={docName}
+        editorRef={editorRef}
+        panelsVisible={panelsVisible}
+        docNameInput={docName}
+        cloudDocumentId={cloudDocumentId}
+        user={user}
+        onDocNameChange={setDocName}
+        onDocNameBlur={handleNameBlur}
+        onNavigateHome={() => navigate('/')}
+        onExportOpen={() => setExportOpen(true)}
+        onShareOpen={() => setShareOpen(true)}
+        onShortcutsOpen={() => setShortcutsOpen(true)}
+        onEditorReady={handleEditorReady}
+        onPaste={handlePaste}
+      />
+      <ExportDialog
+        open={exportOpen}
+        editorRef={editorRef}
+        docName={docName}
+        onClose={() => setExportOpen(false)}
+      />
+      <ShareDialog
+        open={shareOpen}
+        documentId={cloudDocumentId ?? docId}
+        onClose={() => setShareOpen(false)}
+      />
+      <ShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+    </CommentsProvider>
+  );
+}
+
+interface EditorPageContentProps {
+  docId: string;
+  docName: string;
+  editorRef: React.MutableRefObject<Editor | null>;
+  panelsVisible: boolean;
+  docNameInput: string;
+  cloudDocumentId: string | null;
+  user: ApiUser | null;
+  onDocNameChange: (name: string) => void;
+  onDocNameBlur: () => void;
+  onNavigateHome: () => void;
+  onExportOpen: () => void;
+  onShareOpen: () => void;
+  onShortcutsOpen: () => void;
+  onEditorReady: () => void;
+  onPaste: (e: React.ClipboardEvent) => void;
+}
+
+function EditorPageContent({
+  docId,
+  docName,
+  editorRef,
+  panelsVisible,
+  docNameInput,
+  cloudDocumentId,
+  user,
+  onDocNameChange,
+  onDocNameBlur,
+  onNavigateHome,
+  onExportOpen,
+  onShareOpen,
+  onShortcutsOpen,
+  onEditorReady,
+  onPaste,
+}: EditorPageContentProps): JSX.Element {
+  const { setPendingAnchor, openThread } = useComments();
+
+  return (
+    <div className="app" onPaste={onPaste}>
       <header className="app-header">
-        <button type="button" className="btn-back" onClick={() => navigate('/')}>
+        <button type="button" className="btn-back" onClick={onNavigateHome}>
           ← 文档
         </button>
         <input
           className="doc-name-input"
-          value={docName}
-          onChange={(e) => setDocName(e.target.value)}
-          onBlur={handleNameBlur}
+          value={docNameInput}
+          onChange={(e) => onDocNameChange(e.target.value)}
+          onBlur={onDocNameBlur}
         />
         {cloudDocumentId && user && (
           <span className="auth-status collab-status" title="已连接云端协作">
@@ -166,7 +245,7 @@ export function EditorPage(): JSX.Element {
         <button
           type="button"
           className="toolbar-btn"
-          onClick={() => setShareOpen(true)}
+          onClick={onShareOpen}
           disabled={!cloudDocumentId}
           title={cloudDocumentId ? '分享' : '登录并同步后可分享'}
         >
@@ -182,41 +261,27 @@ export function EditorPage(): JSX.Element {
             <LayerPanel editorRef={editorRef} />
           </aside>
         )}
-        <main className="app-main">
+        <main className="app-main app-main-canvas">
           <CanvasHost
             docId={docId}
             docName={docName}
             editorRef={editorRef}
-            onExportRequest={() => setExportOpen(true)}
-            onCommentPlace={setCommentAnchor}
-            onShortcutsRequest={() => setShortcutsOpen(true)}
-            onEditorReady={handleEditorReady}
+            onExportRequest={onExportOpen}
+            onCommentPlace={setPendingAnchor}
+            onCommentPinClick={(id, screen) => openThread(id, screen)}
+            onShortcutsRequest={onShortcutsOpen}
+            onEditorReady={onEditorReady}
           />
+          <CommentsLayer editorRef={editorRef} />
+          <CommentThreadPopover editorRef={editorRef} />
         </main>
         {panelsVisible && (
           <aside className="editor-sidebar editor-sidebar-right">
             <PropertiesPanel editorRef={editorRef} />
-            <CommentsPanel
-              documentId={cloudDocumentId ?? docId}
-              cloudEnabled={cloudDocumentId != null}
-              pendingAnchor={commentAnchor}
-              onClearAnchor={() => setCommentAnchor(null)}
-            />
+            <CommentsPanel />
           </aside>
         )}
       </div>
-      <ExportDialog
-        open={exportOpen}
-        editorRef={editorRef}
-        docName={docName}
-        onClose={() => setExportOpen(false)}
-      />
-      <ShareDialog
-        open={shareOpen}
-        documentId={cloudDocumentId ?? docId}
-        onClose={() => setShareOpen(false)}
-      />
-      <ShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   );
 }

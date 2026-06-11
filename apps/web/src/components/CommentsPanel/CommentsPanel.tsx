@@ -1,62 +1,38 @@
-import { useCallback, useEffect, useState } from 'react';
-import { createComment, fetchComments, resolveComment, type ApiComment } from '../../api/client';
+import { useState } from 'react';
+import { useComments } from './commentsContext';
 
-export interface CommentAnchor {
-  pageId: string;
-  worldX: number;
-  worldY: number;
-  elementId: string | null;
-}
+export type { CommentAnchor } from './commentsContext';
 
-interface CommentsPanelProps {
-  documentId: string;
-  cloudEnabled?: boolean;
-  shareToken?: string;
-  readOnly?: boolean;
-  pendingAnchor: CommentAnchor | null;
-  onClearAnchor: () => void;
-}
-
-export function CommentsPanel({
-  documentId,
-  cloudEnabled = true,
-  shareToken,
-  readOnly = false,
-  pendingAnchor,
-  onClearAnchor,
-}: CommentsPanelProps): JSX.Element {
-  const [comments, setComments] = useState<ApiComment[]>([]);
-  const [filter, setFilter] = useState<'all' | 'open'>('open');
+export function CommentsPanel(): JSX.Element {
+  const {
+    comments,
+    filter,
+    setFilter,
+    pendingAnchor,
+    setPendingAnchor,
+    jumpToComment,
+    submitComment,
+    resolveThread,
+    readOnly,
+    cloudEnabled,
+    loadError,
+    activeThreadId,
+    openThread,
+  } = useComments();
   const [draft, setDraft] = useState('');
-  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const reload = useCallback(async () => {
-    if (!documentId || !cloudEnabled) {
-      setComments([]);
-      return;
-    }
-    try {
-      setLoadError(null);
-      const rows = await fetchComments(documentId, shareToken);
-      setComments(rows);
-    } catch {
-      setLoadError('无法加载评论');
-      setComments([]);
-    }
-  }, [documentId, shareToken, cloudEnabled]);
+  const visible = comments
+    .filter((c) => !c.parentId)
+    .filter((c) => filter === 'all' || !c.resolvedAt)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  useEffect(() => {
-    void reload();
-  }, [reload]);
-
-  const visible = comments.filter((c) => filter === 'all' || !c.resolvedAt);
+  const replyCount = (rootId: string): number =>
+    comments.filter((c) => c.parentId === rootId).length;
 
   const submit = async (): Promise<void> => {
-    if (!pendingAnchor || !draft.trim() || !cloudEnabled) return;
-    await createComment(documentId, { ...pendingAnchor, body: draft.trim() });
+    if (!pendingAnchor || !draft.trim()) return;
+    await submitComment(draft);
     setDraft('');
-    onClearAnchor();
-    await reload();
   };
 
   return (
@@ -81,18 +57,44 @@ export function CommentsPanel({
             rows={3}
           />
           <div className="export-dialog-actions">
-            <button type="button" className="btn-secondary" onClick={onClearAnchor}>取消</button>
-            <button type="button" className="btn-primary" onClick={() => void submit()}>发布</button>
+            <button type="button" className="btn-secondary" onClick={() => setPendingAnchor(null)}>
+              取消
+            </button>
+            <button type="button" className="btn-primary" onClick={() => void submit()}>
+              发布
+            </button>
           </div>
         </div>
       )}
       <ul className="comments-list">
         {visible.map((c) => (
-          <li key={c.id} className={c.resolvedAt ? 'resolved' : ''}>
-            <div className="comment-meta">{c.authorName ?? '匿名'}</div>
-            <p>{c.body}</p>
+          <li
+            key={c.id}
+            className={[
+              c.resolvedAt ? 'resolved' : '',
+              activeThreadId === c.id ? 'active' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            <button
+              type="button"
+              className="comment-list-item"
+              onClick={() => {
+                jumpToComment(c);
+                openThread(c.id);
+              }}
+            >
+              <div className="comment-meta">
+                {c.authorName ?? '匿名'}
+                {replyCount(c.id) > 0 && (
+                  <span className="comment-reply-count">{replyCount(c.id)} 条回复</span>
+                )}
+              </div>
+              <p>{c.body}</p>
+            </button>
             {!readOnly && !c.resolvedAt && (
-              <button type="button" onClick={() => void resolveComment(c.id, true).then(reload)}>
+              <button type="button" onClick={() => void resolveThread(c.id)}>
                 标记已解决
               </button>
             )}

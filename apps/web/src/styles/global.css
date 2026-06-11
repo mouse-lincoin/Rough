@@ -811,6 +811,122 @@ body,
   font-size: 12px;
 }
 
+.app-main-canvas {
+  position: relative;
+}
+
+.comment-thread-popover {
+  position: absolute;
+  z-index: 30;
+  width: 300px;
+  max-height: 260px;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.comment-thread-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e5e5e5;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.comment-thread-messages {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comment-thread-messages li {
+  font-size: 12px;
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 6px;
+}
+
+.comment-thread-messages li.resolved {
+  opacity: 0.6;
+}
+
+.comment-thread-messages .comment-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: #666;
+}
+
+.comment-thread-messages .comment-meta time {
+  font-weight: 400;
+  color: #999;
+}
+
+.comment-thread-compose {
+  padding: 8px;
+  border-top: 1px solid #e5e5e5;
+}
+
+.comment-thread-compose textarea {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 6px;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  font-size: 12px;
+  resize: vertical;
+}
+
+.comment-thread-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.comments-list li.active {
+  border-color: #6965db;
+  box-shadow: 0 0 0 1px rgba(105, 101, 219, 0.25);
+}
+
+.comment-list-item {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.comment-reply-count {
+  margin-left: 6px;
+  font-weight: 400;
+  color: #6965db;
+  font-size: 11px;
+}
+
+.comment-thread-header .btn-icon {
+  background: none;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: #666;
+  padding: 0 4px;
+}
+
 .auth-user {
   display: flex;
   align-items: center;

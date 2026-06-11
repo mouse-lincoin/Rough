@@ -79,6 +79,14 @@ export class InputPipeline {
       return;
     }
 
+    if (this.tools.activeTool.name !== 'comment') {
+      const pinId = this.editor.hitTestCommentPin(normalized.screen);
+      if (pinId) {
+        this.editor.handleCommentPinClick(pinId, normalized.screen);
+        return;
+      }
+    }
+
     this.pointerDown = true;
     this.canvas.setPointerCapture(e.pointerId);
     this.getEffectiveTool().onPointerDown(normalized);
