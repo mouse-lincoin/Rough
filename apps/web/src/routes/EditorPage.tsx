@@ -9,6 +9,9 @@ import { PropertiesPanel } from '../components/PropertiesPanel/PropertiesPanel';
 import { PagesPanel } from '../components/PagesPanel/PagesPanel';
 import { ComponentsPanel } from '../components/ComponentsPanel/ComponentsPanel';
 import { ExportDialog } from '../components/ExportDialog/ExportDialog';
+import { ShareDialog } from '../components/ShareDialog/ShareDialog';
+import { AuthButton } from '../components/AuthButton/AuthButton';
+import { CommentsPanel, type CommentAnchor } from '../components/CommentsPanel/CommentsPanel';
 import { useEditorStore } from '../stores/editorStore';
 
 export function EditorPage(): JSX.Element {
@@ -18,6 +21,8 @@ export function EditorPage(): JSX.Element {
   const [docName, setDocName] = useState('未命名');
   const [metaReady, setMetaReady] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [commentAnchor, setCommentAnchor] = useState<CommentAnchor | null>(null);
   const panelsVisible = useEditorStore((s) => s.panelsVisible);
 
   useEffect(() => {
@@ -109,6 +114,8 @@ export function EditorPage(): JSX.Element {
           onBlur={handleNameBlur}
         />
         <Toolbar editorRef={editorRef} />
+        <button type="button" className="toolbar-btn" onClick={() => setShareOpen(true)}>分享</button>
+        <AuthButton />
       </header>
       <div className="editor-layout">
         {panelsVisible && (
@@ -124,11 +131,17 @@ export function EditorPage(): JSX.Element {
             docName={docName}
             editorRef={editorRef}
             onExportRequest={() => setExportOpen(true)}
+            onCommentPlace={setCommentAnchor}
           />
         </main>
         {panelsVisible && (
           <aside className="editor-sidebar editor-sidebar-right">
             <PropertiesPanel editorRef={editorRef} />
+            <CommentsPanel
+              documentId={docId}
+              pendingAnchor={commentAnchor}
+              onClearAnchor={() => setCommentAnchor(null)}
+            />
           </aside>
         )}
       </div>
@@ -138,6 +151,7 @@ export function EditorPage(): JSX.Element {
         docName={docName}
         onClose={() => setExportOpen(false)}
       />
+      <ShareDialog open={shareOpen} documentId={docId} onClose={() => setShareOpen(false)} />
     </div>
   );
 }

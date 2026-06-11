@@ -85,8 +85,10 @@ export class InputPipeline {
   };
 
   private onPointerMove = (e: PointerEvent): void => {
+    const normalized = this.normalize(e);
+    this.editor.publishPointer(normalized.world);
     if (!this.pointerDown) return;
-    this.getEffectiveTool().onPointerMove(this.normalize(e));
+    this.getEffectiveTool().onPointerMove(normalized);
   };
 
   private onPointerUp = (e: PointerEvent): void => {
@@ -329,10 +331,6 @@ export class InputPipeline {
 
     if (!mod && toolKeys[e.key]) {
       const tool = toolKeys[e.key];
-      if (tool === 'comment') {
-        console.info('评论工具 (Phase 6)');
-        return;
-      }
       this.tools.setTool(tool);
       this.onToolChange(this.tools.activeToolName);
       return;

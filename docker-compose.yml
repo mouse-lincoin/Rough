@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rough
+      POSTGRES_PASSWORD: rough
+      POSTGRES_DB: rough
+    ports:
+      - '5432:5432'
+    volumes:
+      - rough-pg:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - rough-minio:/data
+
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://rough:rough@postgres:5432/rough
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: rough
+      JWT_SECRET: rough-dev-secret
+      WEB_ORIGIN: http://localhost:5173
+      DEV_AUTH: 'true'
+      PORT: 3000
+      COLLAB_PORT: 3001
+    ports:
+      - '3000:3000'
+      - '3001:3001'
+    depends_on:
+      - postgres
+      - minio
+
+volumes:
+  rough-pg:
+  rough-minio:

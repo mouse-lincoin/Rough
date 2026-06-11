@@ -8,9 +8,23 @@ interface CanvasHostProps {
   docName: string;
   editorRef: React.MutableRefObject<Editor | null>;
   onExportRequest?: () => void;
+  onCommentPlace?: (anchor: {
+    pageId: string;
+    worldX: number;
+    worldY: number;
+    elementId: string | null;
+  }) => void;
+  readOnly?: boolean;
 }
 
-export function CanvasHost({ docId, docName, editorRef, onExportRequest }: CanvasHostProps): JSX.Element {
+export function CanvasHost({
+  docId,
+  docName,
+  editorRef,
+  onExportRequest,
+  onCommentPlace,
+  readOnly = false,
+}: CanvasHostProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const mainCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -48,8 +62,11 @@ export function CanvasHost({ docId, docName, editorRef, onExportRequest }: Canva
           onPageChange: setCurrentPageId,
           onPanelsToggle: setPanelsVisible,
           onExportRequest,
+          onCommentPlace,
         },
       });
+
+      if (readOnly) editor.setReadOnly(true);
 
       editorRef.current = editor;
       (window as unknown as { __ROUGH_EDITOR__?: Editor }).__ROUGH_EDITOR__ = editor;
@@ -75,6 +92,8 @@ export function CanvasHost({ docId, docName, editorRef, onExportRequest }: Canva
     setCurrentPageId,
     setPanelsVisible,
     onExportRequest,
+    onCommentPlace,
+    readOnly,
   ]);
 
   return (

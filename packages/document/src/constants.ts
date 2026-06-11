@@ -3,3 +3,6 @@ export const LOCAL_ORIGIN = 'rough-local';
 
 /** Origin for live preview updates during drag (not undoable) */
 export const PREVIEW_ORIGIN = 'rough-preview';
+
+/** Origin for remote collaborator updates (not undoable locally) */
+export const COLLAB_ORIGIN = 'rough-collab';

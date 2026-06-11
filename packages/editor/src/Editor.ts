@@ -26,6 +26,8 @@ import {
 import { getAssetBlob } from '@rough/document';
 import type { ExportContext, EditorCallbacks, ToolName } from './types.js';
 import { renderRootsToPngBlobs } from './export/offscreenRender.js';
+import { AwarenessSync, type RemotePeer } from './collab/AwarenessSync.js';
+import type { CollabOptions } from '@rough/document';
 import type { SnapGuide } from './interactions/snapping.js';
 import {
   alignSelection,
@@ -94,6 +96,8 @@ export class Editor implements EditorHost {
   private copiedStyle: { fills: FillStyle[]; strokes: Stroke[]; roughness: number } | null = null;
   private deepInstanceId: ID | null = null;
   private editingComponentId: ID | null = null;
+  private awareness: AwarenessSync | null = null;
+  private remotePeers: RemotePeer[] = [];
 
   constructor(options: EditorOptions) {
     this.callbacks = options.callbacks ?? {};
@@ -117,6 +121,7 @@ export class Editor implements EditorHost {
 
     this.selection.subscribe((ids) => {
       this.callbacks.onSelectionChange?.(ids);
+      this.awareness?.publishSelection(ids, this.document.getCurrentPageId());
       this.requestRender();
     });
 
@@ -221,6 +226,8 @@ export class Editor implements EditorHost {
       marqueeRect: selectTool.getMarqueeRect(),
       transformHandle: null,
       snapGuides: this.snapGuides,
+      remotePeers: this.remotePeers,
+      currentPageId: this.document.getCurrentPageId(),
     });
   }
 
@@ -604,6 +611,48 @@ export class Editor implements EditorHost {
     this.callbacks.onExportRequest?.();
   }
 
+  connectCollab(options: CollabOptions & { user: { id: string; name: string } }): void {
+    this.document.connectCollab(options);
+    this.awareness?.destroy();
+    this.awareness = new AwarenessSync(this.document, this.viewport, options.user);
+    this.awareness.start(
+      () => this.document.getCurrentPageId(),
+      (peers) => {
+        this.remotePeers = peers;
+        this.requestRender();
+      },
+    );
+  }
+
+  disconnectCollab(): void {
+    this.awareness?.destroy();
+    this.awareness = null;
+    this.remotePeers = [];
+    this.document.disconnectCollab();
+    this.requestRender();
+  }
+
+  publishPointer(world: import('@rough/schema').Vec2): void {
+    this.awareness?.publishPointer(world, this.selection.selectedIds, this.document.getCurrentPageId());
+  }
+
+  setReadOnly(readOnly: boolean): void {
+    this.document.setReadOnly(readOnly);
+  }
+
+  isReadOnly(): boolean {
+    return this.document.isReadOnly();
+  }
+
+  placeComment(worldX: number, worldY: number): void {
+    this.callbacks.onCommentPlace?.({
+      pageId: this.document.getCurrentPageId(),
+      worldX,
+      worldY,
+      elementId: [...this.selection.selectedIds][0] ?? null,
+    });
+  }
+
   getExportContext(): ExportContext {
     const selectionIds = [...this.selection.selectedIds];
     const elements = this.document.getElements();
@@ -692,6 +741,7 @@ export class Editor implements EditorHost {
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
     }
+    this.awareness?.destroy();
     this.input?.destroy();
     this.textEditor.destroy();
     this.document.destroy();

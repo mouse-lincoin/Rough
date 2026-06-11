@@ -11,13 +11,14 @@ import { FrameTool } from './tools/FrameTool.js';
 import { TextTool } from './tools/TextTool.js';
 import { PolygonTool } from './tools/PolygonTool.js';
 import { ArrowTool } from './tools/ArrowTool.js';
+import { CommentTool } from './tools/CommentTool.js';
 
 export class ToolManager {
   private tools: Map<ToolName, Tool>;
   private _activeTool: Tool;
   selectTool: SelectTool;
 
-  constructor(ctx: EditorContext, host?: import('../EditorContext.js').EditorHost & { getGridSnap?: () => boolean; setSnapGuides?: (guides: import('../interactions/snapping.js').SnapGuide[]) => void }) {
+  constructor(ctx: EditorContext, host?: import('../EditorContext.js').EditorHost & { getGridSnap?: () => boolean; setSnapGuides?: (guides: import('../interactions/snapping.js').SnapGuide[]) => void; placeComment?: (x: number, y: number) => void }) {
     this.selectTool = new SelectTool(ctx, host);
     this.tools = new Map<ToolName, Tool>([
       ['select', this.selectTool],
@@ -30,6 +31,7 @@ export class ToolManager {
       ['text', new TextTool(ctx)],
       ['polygon', new PolygonTool(ctx)],
       ['arrow', new ArrowTool(ctx)],
+      ['comment', new CommentTool(ctx, host as import('../Editor.js').Editor)],
     ]);
     this._activeTool = this.tools.get('select')!;
   }
