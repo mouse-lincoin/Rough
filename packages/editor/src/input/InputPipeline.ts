@@ -299,7 +299,7 @@ export class InputPipeline {
 
     if (mod && e.key === '/') {
       e.preventDefault();
-      console.info('快捷键帮助 (Phase 7)');
+      this.editor.requestShortcutsHelp();
       return;
     }
 

@@ -44,6 +44,7 @@ export function Toolbar({ editorRef }: ToolbarProps): JSX.Element {
           type="button"
           className={`toolbar-btn ${activeTool === tool.name ? 'active' : ''}`}
           title={`${tool.label} (${tool.shortcut})`}
+          data-testid={`tool-${tool.name}`}
           onClick={() => handleToolClick(tool.name)}
         >
           {tool.label}

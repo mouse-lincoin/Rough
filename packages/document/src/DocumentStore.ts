@@ -35,8 +35,11 @@ export class DocumentStore {
     this.documentId = documentId;
     this.currentPageId = currentPageId;
     this.undo = new DocumentUndoManager(ydoc);
-    this.ydoc.on('update', () => {
+    this.ydoc.on('update', (_update, origin) => {
       void touchDocumentMeta(this.documentId);
+      if (this.collab.isConnected() && origin !== LOCAL_ORIGIN && origin !== PREVIEW_ORIGIN) {
+        this.reconcileCurrentPage();
+      }
       this.notify();
     });
   }
@@ -429,6 +432,34 @@ export class DocumentStore {
 
   isCollabConnected(): boolean {
     return this.collab.isConnected();
+  }
+
+  waitForCollabSynced(timeoutMs?: number): Promise<boolean> {
+    return this.collab.waitForSynced(timeoutMs);
+  }
+
+  /** After collab merge, follow the page that actually has content. */
+  reconcileCurrentPage(): void {
+    const pages = this.ydoc.getMap('pages');
+    const pageOrder = this.ydoc.getArray<ID>('pageOrder');
+    let bestId: ID | null = null;
+    let bestCount = -1;
+
+    for (let i = 0; i < pageOrder.length; i++) {
+      const pageId = pageOrder.get(i) as ID;
+      const pageMap = pages.get(pageId) as Y.Map<unknown> | undefined;
+      const elementsMap = pageMap?.get('elements') as Y.Map<unknown> | undefined;
+      const count = elementsMap?.size ?? 0;
+      if (count > bestCount) {
+        bestCount = count;
+        bestId = pageId;
+      }
+    }
+
+    if (bestId && bestId !== this.currentPageId) {
+      this.currentPageId = bestId;
+      this.notify();
+    }
   }
 
   setReadOnly(readOnly: boolean): void {

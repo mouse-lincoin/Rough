@@ -2,12 +2,14 @@ import { useEffect, useRef } from 'react';
 import { DocumentStore } from '@rough/document';
 import { Editor } from '@rough/editor';
 import { useEditorStore } from '../stores/editorStore';
+import { attachE2EBridge } from '../e2eBridge';
 
 interface CanvasHostProps {
   docId: string;
   docName: string;
   editorRef: React.MutableRefObject<Editor | null>;
   onExportRequest?: () => void;
+  onShortcutsRequest?: () => void;
   onCommentPlace?: (anchor: {
     pageId: string;
     worldX: number;
@@ -22,6 +24,7 @@ export function CanvasHost({
   docName,
   editorRef,
   onExportRequest,
+  onShortcutsRequest,
   onCommentPlace,
   readOnly = false,
 }: CanvasHostProps): JSX.Element {
@@ -62,11 +65,14 @@ export function CanvasHost({
           onPageChange: setCurrentPageId,
           onPanelsToggle: setPanelsVisible,
           onExportRequest,
+          onShortcutsRequest,
           onCommentPlace,
         },
       });
 
       if (readOnly) editor.setReadOnly(true);
+      attachE2EBridge(editor);
+      performance.mark('rough-editor-ready');
 
       editorRef.current = editor;
       (window as unknown as { __ROUGH_EDITOR__?: Editor }).__ROUGH_EDITOR__ = editor;
@@ -92,6 +98,7 @@ export function CanvasHost({
     setCurrentPageId,
     setPanelsVisible,
     onExportRequest,
+    onShortcutsRequest,
     onCommentPlace,
     readOnly,
   ]);

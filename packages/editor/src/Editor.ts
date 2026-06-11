@@ -23,7 +23,8 @@ import {
   resolveExportTargets,
   type AiPromptFramework,
 } from '@rough/export';
-import { getAssetBlob } from '@rough/document';
+import { getAssetBlob, saveDocumentThumbnail } from '@rough/document';
+import { capturePageThumbnail } from './export/thumbnailCapture.js';
 import type { ExportContext, EditorCallbacks, ToolName } from './types.js';
 import { renderRootsToPngBlobs } from './export/offscreenRender.js';
 import { AwarenessSync, type RemotePeer } from './collab/AwarenessSync.js';
@@ -98,6 +99,7 @@ export class Editor implements EditorHost {
   private editingComponentId: ID | null = null;
   private awareness: AwarenessSync | null = null;
   private remotePeers: RemotePeer[] = [];
+  private thumbnailTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: EditorOptions) {
     this.callbacks = options.callbacks ?? {};
@@ -130,6 +132,7 @@ export class Editor implements EditorHost {
       refreshBoundArrows(this.ctx);
       this.markSceneDirty();
       this.callbacks.onDocumentChange?.();
+      this.scheduleThumbnailCapture();
     });
 
     this.sceneGraph.rebuild(this.document.getElements(), this.document.getComponents());
@@ -611,6 +614,31 @@ export class Editor implements EditorHost {
     this.callbacks.onExportRequest?.();
   }
 
+  requestShortcutsHelp(): void {
+    this.callbacks.onShortcutsRequest?.();
+  }
+
+  private scheduleThumbnailCapture(): void {
+    if (this.thumbnailTimer) clearTimeout(this.thumbnailTimer);
+    this.thumbnailTimer = setTimeout(() => {
+      void this.captureAndSaveThumbnail();
+    }, 10_000);
+  }
+
+  async captureAndSaveThumbnail(): Promise<void> {
+    const page = this.document.getPage();
+    const dataUrl = await capturePageThumbnail({
+      elements: page.elements,
+      components: this.document.getComponents(),
+      background: page.background,
+      cleanMode: this.cleanMode,
+      imageCache: this.imageCache,
+    });
+    if (!dataUrl) return;
+    await saveDocumentThumbnail(this.document.getDocumentId(), dataUrl);
+    this.callbacks.onThumbnailUpdated?.();
+  }
+
   connectCollab(options: CollabOptions & { user: { id: string; name: string } }): void {
     this.document.connectCollab(options);
     this.awareness?.destroy();
@@ -622,6 +650,9 @@ export class Editor implements EditorHost {
         this.requestRender();
       },
     );
+    void this.document.waitForCollabSynced().then((ok) => {
+      if (ok) this.document.reconcileCurrentPage();
+    });
   }
 
   disconnectCollab(): void {
@@ -738,6 +769,8 @@ export class Editor implements EditorHost {
 
   destroy(): void {
     this.persistViewport();
+    if (this.thumbnailTimer) clearTimeout(this.thumbnailTimer);
+    void this.captureAndSaveThumbnail();
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
     }

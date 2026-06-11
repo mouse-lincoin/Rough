@@ -12,6 +12,7 @@ import { ExportDialog } from '../components/ExportDialog/ExportDialog';
 import { ShareDialog } from '../components/ShareDialog/ShareDialog';
 import { AuthButton } from '../components/AuthButton/AuthButton';
 import { CommentsPanel, type CommentAnchor } from '../components/CommentsPanel/CommentsPanel';
+import { ShortcutsHelp } from '../components/ShortcutsHelp/ShortcutsHelp';
 import { useEditorStore } from '../stores/editorStore';
 
 export function EditorPage(): JSX.Element {
@@ -22,6 +23,7 @@ export function EditorPage(): JSX.Element {
   const [metaReady, setMetaReady] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [commentAnchor, setCommentAnchor] = useState<CommentAnchor | null>(null);
   const panelsVisible = useEditorStore((s) => s.panelsVisible);
 
@@ -132,6 +134,7 @@ export function EditorPage(): JSX.Element {
             editorRef={editorRef}
             onExportRequest={() => setExportOpen(true)}
             onCommentPlace={setCommentAnchor}
+            onShortcutsRequest={() => setShortcutsOpen(true)}
           />
         </main>
         {panelsVisible && (
@@ -152,6 +155,7 @@ export function EditorPage(): JSX.Element {
         onClose={() => setExportOpen(false)}
       />
       <ShareDialog open={shareOpen} documentId={docId} onClose={() => setShareOpen(false)} />
+      <ShortcutsHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </div>
   );
 }

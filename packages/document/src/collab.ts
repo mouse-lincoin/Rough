@@ -44,6 +44,27 @@ export class CollabSession {
   isConnected(): boolean {
     return this.provider?.isConnected ?? false;
   }
+
+  waitForSynced(timeoutMs = 10_000): Promise<boolean> {
+    const provider = this.provider;
+    if (!provider) return Promise.resolve(false);
+    if (provider.synced) return Promise.resolve(true);
+
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        provider.off('synced', onSynced);
+        resolve(provider.synced);
+      }, timeoutMs);
+
+      const onSynced = (): void => {
+        clearTimeout(timer);
+        provider.off('synced', onSynced);
+        resolve(true);
+      };
+
+      provider.on('synced', onSynced);
+    });
+  }
 }
 
 export function isCollabOrigin(origin: unknown): boolean {
