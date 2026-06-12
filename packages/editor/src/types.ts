@@ -55,6 +55,7 @@ export interface EditorCallbacks {
   onCommentAnchorsDegrade?: (
     updates: Array<{ id: ID; elementId: null; worldX: number; worldY: number }>,
   ) => void;
+  onToast?: (message: string) => void;
 }
 
 export interface ExportContext {

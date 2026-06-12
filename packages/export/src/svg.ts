@@ -1,4 +1,13 @@
-import type { ComponentDef, Element, FrameElement, ID, TextElement } from '@rough/schema';
+import type {
+  ArrowElement,
+  ComponentDef,
+  Element,
+  FrameElement,
+  ID,
+  PathElement,
+  PolygonElement,
+  TextElement,
+} from '@rough/schema';
 import { rgbaToCss } from '@rough/shared';
 import rough from 'roughjs/bin/rough';
 import type { Drawable } from 'roughjs/bin/core';
@@ -110,6 +119,21 @@ async function renderNode(
     return;
   }
 
+  if (el.type === 'path') {
+    renderPathElement(ctx, el as PathElement, x, y, transform);
+    return;
+  }
+
+  if (el.type === 'arrow') {
+    renderArrowElement(ctx, el as ArrowElement, x, y, transform);
+    return;
+  }
+
+  if (el.type === 'polygon') {
+    renderPolygonElement(ctx, el as PolygonElement, transform);
+    return;
+  }
+
   const fill = solidFill(el.fills);
   const stroke = el.strokes[0];
 
@@ -142,6 +166,161 @@ async function renderNode(
   }
 }
 
+function polygonVertices(el: PolygonElement): { x: number; y: number }[] {
+  const cx = el.width / 2;
+  const cy = el.height / 2;
+  const rx = el.width / 2;
+  const ry = el.height / 2;
+  const verts: { x: number; y: number }[] = [];
+  for (let i = 0; i < el.sides; i++) {
+    const angle = (2 * Math.PI * i) / el.sides - Math.PI / 2;
+    verts.push({ x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle) });
+  }
+  return verts;
+}
+
+function renderPolygonElement(
+  ctx: SvgContext,
+  el: PolygonElement,
+  transform: string,
+): void {
+  const verts = polygonVertices(el);
+  const fill = solidFill(el.fills);
+  const stroke = el.strokes[0];
+  const points = verts.map((v) => `${v.x},${v.y}`).join(' ');
+
+  if (el.roughness > 0) {
+    const paths = roughPaths(el, verts);
+    for (const d of paths) {
+      ctx.body.push(
+        `<path d="${d}" fill="${fill ?? 'none'}" stroke="${stroke ? rgbaToCss(stroke.color) : 'none'}" stroke-width="${stroke?.width ?? 2}" opacity="${el.opacity}"${transform}/>`,
+      );
+    }
+    return;
+  }
+
+  ctx.body.push(
+    `<polygon points="${points}" fill="${fill ?? 'none'}" stroke="${stroke ? rgbaToCss(stroke.color) : 'none'}" stroke-width="${stroke?.width ?? 2}" opacity="${el.opacity}"${transform}/>`,
+  );
+}
+
+function renderPathElement(
+  ctx: SvgContext,
+  el: PathElement,
+  offsetX: number,
+  offsetY: number,
+  transform: string,
+): void {
+  if (el.points.length < 2) return;
+  const stroke = el.strokes[0];
+  const strokeColor = stroke ? rgbaToCss(stroke.color) : '#1a1a1a';
+  const strokeWidth = stroke?.width ?? 2;
+
+  if (el.roughness > 0) {
+    const paths = roughPaths(el, el.points);
+    for (const d of paths) {
+      ctx.body.push(
+        `<path d="${d}" fill="none" stroke="${strokeColor}" stroke-width="${strokeWidth}" opacity="${el.opacity}"${transform}/>`,
+      );
+    }
+    return;
+  }
+
+  const d = el.points
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${offsetX + p.x} ${offsetY + p.y}`)
+    .join(' ');
+  ctx.body.push(
+    `<path d="${d}" fill="none" stroke="${strokeColor}" stroke-width="${strokeWidth}" opacity="${el.opacity}"/>`,
+  );
+}
+
+function renderArrowElement(
+  ctx: SvgContext,
+  el: ArrowElement,
+  offsetX: number,
+  offsetY: number,
+  transform: string,
+): void {
+  if (el.points.length < 2) return;
+  const stroke = el.strokes[0];
+  const strokeColor = stroke ? rgbaToCss(stroke.color) : '#1a1a1a';
+  const strokeWidth = stroke?.width ?? 2;
+
+  if (el.roughness > 0) {
+    const paths = roughPaths(el, el.points);
+    for (const d of paths) {
+      ctx.body.push(
+        `<path d="${d}" fill="none" stroke="${strokeColor}" stroke-width="${strokeWidth}" opacity="${el.opacity}"${transform}/>`,
+      );
+    }
+  } else {
+    const d = el.points
+      .map((p, i) => `${i === 0 ? 'M' : 'L'} ${offsetX + p.x} ${offsetY + p.y}`)
+      .join(' ');
+    ctx.body.push(
+      `<path d="${d}" fill="none" stroke="${strokeColor}" stroke-width="${strokeWidth}" opacity="${el.opacity}"/>`,
+    );
+  }
+
+  const last = el.points[el.points.length - 1];
+  const prev = el.points[el.points.length - 2];
+  const head = svgArrowHead(
+    offsetX + prev.x,
+    offsetY + prev.y,
+    offsetX + last.x,
+    offsetY + last.y,
+    el.endHead,
+    strokeColor,
+    strokeWidth,
+  );
+  if (head) ctx.body.push(head);
+  if (el.startHead !== 'none' && el.points.length > 1) {
+    const startHead = svgArrowHead(
+      offsetX + el.points[1].x,
+      offsetY + el.points[1].y,
+      offsetX + el.points[0].x,
+      offsetY + el.points[0].y,
+      el.startHead,
+      strokeColor,
+      strokeWidth,
+    );
+    if (startHead) ctx.body.push(startHead);
+  }
+
+  if (el.label?.trim()) {
+    const midIdx = Math.floor((el.points.length - 1) / 2);
+    const a = el.points[midIdx];
+    const b = el.points[midIdx + 1];
+    const mx = offsetX + (a.x + b.x) / 2;
+    const my = offsetY + (a.y + b.y) / 2;
+    ctx.body.push(
+      `<text x="${mx}" y="${my - 4}" font-family="Inter, sans-serif" font-size="12" text-anchor="middle" fill="#1a1a1a">${escapeXml(el.label)}</text>`,
+    );
+  }
+}
+
+function svgArrowHead(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  head: ArrowElement['endHead'],
+  color: string,
+  width: number,
+): string | null {
+  if (head === 'none') return null;
+  const size = Math.max(8, width * 3);
+  if (head === 'dot') {
+    return `<circle cx="${toX}" cy="${toY}" r="${size / 3}" fill="${color}"/>`;
+  }
+  const angle = Math.atan2(toY - fromY, toX - fromX);
+  const x1 = toX - size * Math.cos(angle - Math.PI / 6);
+  const y1 = toY - size * Math.sin(angle - Math.PI / 6);
+  const x2 = toX - size * Math.cos(angle + Math.PI / 6);
+  const y2 = toY - size * Math.sin(angle + Math.PI / 6);
+  return `<polygon points="${toX},${toY} ${x1},${y1} ${x2},${y2}" fill="${color}"/>`;
+}
+
 function cornerRadius(value: number | [number, number, number, number]): number {
   return Array.isArray(value) ? value[0]! : value;
 }
@@ -151,7 +330,10 @@ function solidFill(fills: Element['fills']): string | null {
   return solid ? rgbaToCss(solid.color) : null;
 }
 
-function roughPaths(el: Element): string[] {
+function roughPaths(
+  el: Element,
+  points?: { x: number; y: number }[],
+): string[] {
   const gen = rough.generator();
   let drawable: Drawable | null = null;
   const w = el.width;
@@ -169,6 +351,16 @@ function roughPaths(el: Element): string[] {
     drawable = gen.rectangle(0, 0, w, h, options);
   } else if (el.type === 'ellipse') {
     drawable = gen.ellipse(w / 2, h / 2, w, h, options);
+  } else if (el.type === 'polygon' && points) {
+    drawable = gen.polygon(
+      points.map((p) => [p.x, p.y] as [number, number]),
+      options,
+    );
+  } else if ((el.type === 'path' || el.type === 'arrow') && points) {
+    drawable = gen.linearPath(
+      points.map((p) => [p.x, p.y] as [number, number]),
+      options,
+    );
   } else {
     return [];
   }

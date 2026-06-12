@@ -1,6 +1,15 @@
 import { useMemo } from 'react';
 import type { Editor } from '@rough/editor';
-import type { Element, FrameElement, RGBA, RectangleElement, SemanticTag } from '@rough/schema';
+import type {
+  Effect,
+  Element,
+  FillStyle,
+  FrameElement,
+  RGBA,
+  RectangleElement,
+  SemanticTag,
+  Stroke,
+} from '@rough/schema';
 import { useEditorStore } from '../../stores/editorStore';
 
 interface PropertiesPanelProps {
@@ -106,12 +115,28 @@ export function PropertiesPanel({ editorRef }: PropertiesPanelProps): JSX.Elemen
   const opacity = mixedValue(elements.map((e) => e.opacity));
   const roughness = mixedValue(elements.map((e) => e.roughness));
 
-  const fillColor =
-    elements[0].fills[0]?.type === 'solid' ? elements[0].fills[0].color : null;
-  const strokeWidth = elements[0].strokes[0]?.width ?? 2;
+  const fill0 = elements[0].fills[0];
+  const fillType = fill0?.type ?? 'solid';
+  const fillColor = fill0?.type === 'solid' ? fill0.color : null;
+  const stroke0 = elements[0].strokes[0];
+  const strokeWidth = stroke0?.width ?? 2;
+  const strokeColor = stroke0?.color ?? { r: 26, g: 26, b: 26, a: 1 };
+  const strokeStyle = stroke0?.style ?? 'solid';
+  const hasShadow = elements.every((el) => el.effects.some((e) => e.type === 'drop-shadow'));
+  const hasBlur = elements.every((el) => el.effects.some((e) => e.type === 'layer-blur'));
+  const shadowEffect = elements[0].effects.find((e) => e.type === 'drop-shadow');
+  const isRect = elements.every((e) => e.type === 'rectangle');
+  const corner0 = isRect ? (elements[0] as RectangleElement).cornerRadius : 0;
+  const parentEl = elements[0]?.parentId
+    ? editorRef.current?.document.getElement(elements[0].parentId)
+    : null;
+  const inAutoLayoutParent =
+    parentEl?.type === 'frame' && !!parentEl.autoLayout && elements.every((e) => e.parentId === elements[0].parentId);
+  const sizingX = elements[0].layoutChild?.sizingX ?? 'fixed';
+  const sizingY = elements[0].layoutChild?.sizingY ?? 'fixed';
+  const cornerExpanded = isRect && Array.isArray(corner0) && corner0.length === 4;
 
   const isText = elements.every((e) => e.type === 'text');
-  const isRect = elements.every((e) => e.type === 'rectangle');
   const isFrame = elements.every((e) => e.type === 'frame');
   const isInstance = elements.length === 1 && elements[0].type === 'instance';
   const instanceEl = isInstance ? elements[0] : null;
@@ -202,14 +227,48 @@ export function PropertiesPanel({ editorRef }: PropertiesPanelProps): JSX.Elemen
       {isRect && (
         <section className="prop-section">
           <div className="prop-section-title">圆角</div>
-          <PropField
-            label="R"
-            value={(elements[0] as RectangleElement).cornerRadius as number}
-            onChange={(v) => {
-              const r = parseNumInput(v, 0);
-              updateAll({ cornerRadius: r } as Partial<Element>);
-            }}
-          />
+          <label className="prop-checkbox">
+            <input
+              type="checkbox"
+              checked={cornerExpanded}
+              onChange={(e) => {
+                const el = elements[0] as RectangleElement;
+                const r = Array.isArray(el.cornerRadius) ? el.cornerRadius[0] : el.cornerRadius;
+                updateAll({
+                  cornerRadius: e.target.checked ? [r, r, r, r] : r,
+                } as Partial<Element>);
+              }}
+            />
+            独立四角
+          </label>
+          {cornerExpanded ? (
+            <div className="prop-grid">
+              {(['TL', 'TR', 'BR', 'BL'] as const).map((label, i) => {
+                const corners = Array.isArray(corner0) ? corner0 : [0, 0, 0, 0];
+                return (
+                  <PropField
+                    key={label}
+                    label={label}
+                    value={corners[i] ?? 0}
+                    onChange={(v) => {
+                      const cur = [...corners] as [number, number, number, number];
+                      cur[i] = parseNumInput(v, 0);
+                      updateAll({ cornerRadius: cur } as Partial<Element>);
+                    }}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <PropField
+              label="R"
+              value={Array.isArray(corner0) ? corner0[0] : corner0}
+              onChange={(v) => {
+                const r = parseNumInput(v, 0);
+                updateAll({ cornerRadius: r } as Partial<Element>);
+              }}
+            />
+          )}
         </section>
       )}
 
@@ -259,8 +318,117 @@ export function PropertiesPanel({ editorRef }: PropertiesPanelProps): JSX.Elemen
                   } as Partial<Element>);
                 }}
               />
+              <label className="prop-label">
+                方向
+                <select
+                  className="prop-input"
+                  value={elements[0].autoLayout.direction}
+                  onChange={(e) => {
+                    updateAll({
+                      autoLayout: {
+                        ...elements[0].autoLayout!,
+                        direction: e.target.value as 'horizontal' | 'vertical',
+                      },
+                    } as Partial<Element>);
+                  }}
+                >
+                  <option value="horizontal">水平</option>
+                  <option value="vertical">垂直</option>
+                </select>
+              </label>
+              <label className="prop-label">
+                主轴对齐
+                <select
+                  className="prop-input"
+                  value={elements[0].autoLayout.justifyContent}
+                  onChange={(e) => {
+                    updateAll({
+                      autoLayout: {
+                        ...elements[0].autoLayout!,
+                        justifyContent: e.target.value as
+                          | 'start'
+                          | 'center'
+                          | 'end'
+                          | 'space-between',
+                      },
+                    } as Partial<Element>);
+                  }}
+                >
+                  <option value="start">起始</option>
+                  <option value="center">居中</option>
+                  <option value="end">末尾</option>
+                  <option value="space-between">两端对齐</option>
+                </select>
+              </label>
+              <label className="prop-label">
+                交叉轴对齐
+                <select
+                  className="prop-input"
+                  value={elements[0].autoLayout.alignItems}
+                  onChange={(e) => {
+                    updateAll({
+                      autoLayout: {
+                        ...elements[0].autoLayout!,
+                        alignItems: e.target.value as 'start' | 'center' | 'end',
+                      },
+                    } as Partial<Element>);
+                  }}
+                >
+                  <option value="start">起始</option>
+                  <option value="center">居中</option>
+                  <option value="end">末尾</option>
+                </select>
+              </label>
             </div>
           )}
+        </section>
+      )}
+
+      {inAutoLayoutParent && (
+        <section className="prop-section">
+          <div className="prop-section-title">布局子项</div>
+          <div className="prop-grid">
+            <label className="prop-label">
+              宽度
+              <select
+                className="prop-input"
+                value={sizingX}
+                onChange={(e) => {
+                  const sizing = e.target.value as 'fixed' | 'hug' | 'fill';
+                  updateAll({
+                    layoutChild: {
+                      sizingX: sizing,
+                      sizingY: elements[0].layoutChild?.sizingY ?? 'fixed',
+                    },
+                  } as Partial<Element>);
+                }}
+              >
+                <option value="fixed">固定</option>
+                <option value="hug">适应</option>
+                <option value="fill">填充</option>
+              </select>
+            </label>
+            <label className="prop-label">
+              高度
+              <select
+                className="prop-input"
+                value={sizingY}
+                onChange={(e) => {
+                  const sizing = e.target.value as 'fixed' | 'hug' | 'fill';
+                  updateAll({
+                    layoutChild: {
+                      sizingX: elements[0].layoutChild?.sizingX ?? 'fixed',
+                      sizingY: sizing,
+                    },
+                  } as Partial<Element>);
+                }}
+              >
+                <option value="fixed">固定</option>
+                <option value="hug">适应</option>
+                <option value="fill">填充</option>
+              </select>
+            </label>
+          </div>
         </section>
       )}
 
@@ -314,17 +482,120 @@ export function PropertiesPanel({ editorRef }: PropertiesPanelProps): JSX.Elemen
 
       <section className="prop-section">
         <div className="prop-section-title">填充</div>
+        <select
+          className="prop-input"
+          value={fillType}
+          onChange={(e) => {
+            const type = e.target.value as FillStyle['type'];
+            const updated = elements.map((el) => {
+              if (type === 'solid') {
+                return { ...el, fills: [{ type: 'solid' as const, color: fillColor ?? PRESET_COLORS[0] }] };
+              }
+              if (type === 'hachure') {
+                return {
+                  ...el,
+                  fills: [{ type: 'hachure' as const, color: fillColor ?? PRESET_COLORS[0], gap: 4, angle: 45 }],
+                };
+              }
+              if (el.type !== 'image') return el;
+              return {
+                ...el,
+                fills: [{ type: 'image' as const, assetId: el.assetId, mode: 'fill' as const }],
+              };
+            });
+            editorRef.current?.updateElements(updated);
+            bumpDocumentVersion();
+          }}
+        >
+          <option value="solid">纯色</option>
+          <option value="hachure">排线</option>
+          <option value="image">图片</option>
+        </select>
+        {fillType !== 'image' && (
+          <>
+            <div className="color-swatches">
+              {PRESET_COLORS.map((c) => (
+                <button
+                  key={rgbaToHex(c)}
+                  type="button"
+                  className="color-swatch"
+                  style={{ background: rgbaToHex(c) }}
+                  onClick={() => {
+                    const updated = elements.map((el) => {
+                      if (fillType === 'hachure') {
+                        const prev = el.fills[0];
+                        return {
+                          ...el,
+                          fills: [
+                            {
+                              type: 'hachure' as const,
+                              color: c,
+                              gap: prev?.type === 'hachure' ? prev.gap : 4,
+                              angle: prev?.type === 'hachure' ? prev.angle : 45,
+                            },
+                          ],
+                        };
+                      }
+                      return { ...el, fills: [{ type: 'solid' as const, color: c }] };
+                    });
+                    editorRef.current?.updateElements(updated);
+                    bumpDocumentVersion();
+                  }}
+                />
+              ))}
+            </div>
+            {fillColor && (
+              <input
+                className="prop-input"
+                value={rgbaToHex(fillColor)}
+                onChange={(e) => {
+                  const hex = e.target.value.replace('#', '');
+                  if (hex.length !== 6) return;
+                  const c: RGBA = {
+                    r: parseInt(hex.slice(0, 2), 16),
+                    g: parseInt(hex.slice(2, 4), 16),
+                    b: parseInt(hex.slice(4, 6), 16),
+                    a: 1,
+                  };
+                  const updated = elements.map((el) => {
+                    if (fillType === 'hachure') {
+                      const prev = el.fills[0];
+                      return {
+                        ...el,
+                        fills: [
+                          {
+                            type: 'hachure' as const,
+                            color: c,
+                            gap: prev?.type === 'hachure' ? prev.gap : 4,
+                            angle: prev?.type === 'hachure' ? prev.angle : 45,
+                          },
+                        ],
+                      };
+                    }
+                    return { ...el, fills: [{ type: 'solid' as const, color: c }] };
+                  });
+                  editorRef.current?.updateElements(updated);
+                  bumpDocumentVersion();
+                }}
+              />
+            )}
+          </>
+        )}
+      </section>
+
+      <section className="prop-section">
+        <div className="prop-section-title">描边</div>
         <div className="color-swatches">
-          {PRESET_COLORS.map((c) => (
+          {PRESET_COLORS.slice(0, 6).map((c) => (
             <button
-              key={rgbaToHex(c)}
+              key={`stroke-${rgbaToHex(c)}`}
               type="button"
               className="color-swatch"
               style={{ background: rgbaToHex(c) }}
               onClick={() => {
                 const updated = elements.map((el) => ({
                   ...el,
-                  fills: [{ type: 'solid' as const, color: c }],
+                  strokes: [{ color: c, width: strokeWidth, style: strokeStyle }],
                 }));
                 editorRef.current?.updateElements(updated);
                 bumpDocumentVersion();
@@ -332,32 +603,23 @@ export function PropertiesPanel({ editorRef }: PropertiesPanelProps): JSX.Elemen
             />
           ))}
         </div>
-        {fillColor && (
-          <input
-            className="prop-input"
-            value={rgbaToHex(fillColor)}
-            onChange={(e) => {
-              const hex = e.target.value.replace('#', '');
-              if (hex.length !== 6) return;
-              const c: RGBA = {
-                r: parseInt(hex.slice(0, 2), 16),
-                g: parseInt(hex.slice(2, 4), 16),
-                b: parseInt(hex.slice(4, 6), 16),
-                a: 1,
-              };
-              const updated = elements.map((el) => ({
-                ...el,
-                fills: [{ type: 'solid' as const, color: c }],
-              }));
-              editorRef.current?.updateElements(updated);
-              bumpDocumentVersion();
-            }}
-          />
-        )}
-      </section>
-
-      <section className="prop-section">
-        <div className="prop-section-title">描边</div>
+        <select
+          className="prop-input"
+          value={strokeStyle}
+          onChange={(e) => {
+            const style = e.target.value as Stroke['style'];
+            const updated = elements.map((el) => ({
+              ...el,
+              strokes: [{ color: strokeColor, width: strokeWidth, style }],
+            }));
+            editorRef.current?.updateElements(updated);
+            bumpDocumentVersion();
+          }}
+        >
+          <option value="solid">实线</option>
+          <option value="dashed">虚线</option>
+          <option value="dotted">点线</option>
+        </select>
         <PropField
           label="宽度"
           value={strokeWidth}
@@ -365,14 +627,76 @@ export function PropertiesPanel({ editorRef }: PropertiesPanelProps): JSX.Elemen
             const width = parseNumInput(v, 2);
             const updated = elements.map((el) => ({
               ...el,
-              strokes: el.strokes.length > 0
-                ? [{ ...el.strokes[0], width }]
-                : [{ color: { r: 26, g: 26, b: 26, a: 1 }, width, style: 'solid' as const }],
+              strokes: [{ color: strokeColor, width, style: strokeStyle }],
             }));
             editorRef.current?.updateElements(updated);
             bumpDocumentVersion();
           }}
         />
+      </section>
+
+      <section className="prop-section">
+        <div className="prop-section-title">效果</div>
+        <label className="prop-checkbox">
+          <input
+            type="checkbox"
+            checked={hasShadow}
+            onChange={(e) => {
+              const updated = elements.map((el) => {
+                const rest = el.effects.filter((fx) => fx.type !== 'drop-shadow');
+                if (!e.target.checked) return { ...el, effects: rest };
+                const shadow: Effect = {
+                  type: 'drop-shadow',
+                  offset: { x: 2, y: 4 },
+                  blur: 8,
+                  color: { r: 0, g: 0, b: 0, a: 0.25 },
+                };
+                return { ...el, effects: [...rest, shadow] };
+              });
+              editorRef.current?.updateElements(updated);
+              bumpDocumentVersion();
+            }}
+          />
+          投影
+        </label>
+        {hasShadow && shadowEffect?.type === 'drop-shadow' && (
+          <div className="prop-grid">
+            <PropField
+              label="模糊"
+              value={shadowEffect.blur}
+              onChange={(v) => {
+                const blur = parseNumInput(v, 8);
+                const updated = elements.map((el) => ({
+                  ...el,
+                  effects: el.effects.map((fx) =>
+                    fx.type === 'drop-shadow' ? { ...fx, blur } : fx,
+                  ),
+                }));
+                editorRef.current?.updateElements(updated);
+                bumpDocumentVersion();
+              }}
+            />
+          </div>
+        )}
+        <label className="prop-checkbox">
+          <input
+            type="checkbox"
+            checked={hasBlur}
+            onChange={(e) => {
+              const updated = elements.map((el) => {
+                const rest = el.effects.filter((fx) => fx.type !== 'layer-blur');
+                if (!e.target.checked) return { ...el, effects: rest };
+                return {
+                  ...el,
+                  effects: [...rest, { type: 'layer-blur' as const, radius: 4 }],
+                };
+              });
+              editorRef.current?.updateElements(updated);
+              bumpDocumentVersion();
+            }}
+          />
+          图层模糊
+        </label>
       </section>
 
       <section className="prop-section">
@@ -474,9 +798,34 @@ function PropField({
   value: number | 'Mixed';
   onChange: (v: string) => void;
 }): JSX.Element {
+  const num = value === 'Mixed' ? 0 : value;
+
+  const onLabelPointerDown = (e: React.PointerEvent): void => {
+    if (value === 'Mixed') return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startVal = num;
+    const onMove = (ev: PointerEvent): void => {
+      const delta = ev.clientX - startX;
+      onChange(String(Math.round(startVal + delta)));
+    };
+    const onUp = (): void => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
   return (
     <label className="prop-field">
-      <span className="prop-label">{label}</span>
+      <span
+        className="prop-label prop-label-draggable"
+        onPointerDown={onLabelPointerDown}
+        title="拖拽改值"
+      >
+        {label}
+      </span>
       <input
         className="prop-input"
         value={value === 'Mixed' ? 'Mixed' : String(value)}

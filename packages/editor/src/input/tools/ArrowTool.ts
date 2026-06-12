@@ -8,14 +8,19 @@ import {
   findBindingTarget,
 } from '../../interactions/arrowBinding.js';
 import type { NormalizedPointerEvent } from '../../types.js';
+import type { ID } from '@rough/schema';
 import type { Tool } from './BaseTool.js';
+import type { EditorHost } from '../../EditorContext.js';
 
 export class ArrowTool implements Tool {
   readonly name = 'arrow';
   private start: { x: number; y: number } | null = null;
   private preview: ArrowElement | null = null;
 
-  constructor(private ctx: EditorContext) {}
+  constructor(
+    private ctx: EditorContext,
+    private host?: EditorHost & { setBindingTarget?: (elementId: ID | null) => void },
+  ) {}
 
   onPointerDown(e: NormalizedPointerEvent): void {
     this.start = { ...e.world };
@@ -36,7 +41,9 @@ export class ArrowTool implements Tool {
       defaults,
       binding,
       null,
+      'orthogonal',
     );
+    this.host?.setBindingTarget?.(startBind?.elementId ?? null);
     this.ctx.document.addElement(this.preview);
     this.ctx.rebuildScene();
   }
@@ -50,6 +57,15 @@ export class ArrowTool implements Tool {
       endX = this.start.x + snapped.x;
       endY = this.start.y + snapped.y;
     }
+    const threshold = 12 / this.ctx.viewport.zoom;
+    const endBindPreview = findBindingTarget(
+      this.ctx.sceneGraph,
+      { x: endX, y: endY },
+      threshold,
+      new Set([this.preview.id]),
+    );
+    this.host?.setBindingTarget?.(endBindPreview?.elementId ?? null);
+
     const updated = createArrow(
       this.start.x,
       this.start.y,
@@ -62,6 +78,7 @@ export class ArrowTool implements Tool {
       },
       this.preview.startBinding,
       null,
+      this.preview.routing,
     );
     updated.id = this.preview.id;
     this.preview = updated;
@@ -86,6 +103,7 @@ export class ArrowTool implements Tool {
     this.ctx.runCommand(new AddElementCommand(this.ctx.document, el));
     this.preview = null;
     this.start = null;
+    this.host?.setBindingTarget?.(null);
     this.ctx.switchTool('select');
   }
 
@@ -94,6 +112,7 @@ export class ArrowTool implements Tool {
   }
 
   cancel(): void {
+    this.host?.setBindingTarget?.(null);
     if (this.preview) {
       this.ctx.document.removeElement(this.preview.id);
       this.ctx.rebuildScene();

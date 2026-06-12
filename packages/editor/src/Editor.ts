@@ -60,12 +60,14 @@ import type { AlignType } from './interactions/align.js';
 import {
   ApplyAutoLayoutCommand,
   CreateComponentCommand,
+  CreateComponentFromSelectionCommand,
   DetachInstanceCommand,
   InstantiateComponentCommand,
+  RemoveComponentCommand,
   UpdateComponentCommand,
   UpdateInstanceOverrideCommand,
 } from './commands/componentCommands.js';
-import { parseShadowId } from './components/instanceExpansion.js';
+import { getBlockedOverrideKeys, parseShadowId } from './components/instanceExpansion.js';
 
 export interface EditorOptions {
   container: HTMLElement;
@@ -97,6 +99,8 @@ export class Editor implements EditorHost {
   private panelsVisible = true;
   private snapGuides: SnapGuide[] = [];
   private dropTargetFrameId: ID | null = null;
+  private bindingTargetId: ID | null = null;
+  private layoutInsertLine: import('./render/overlay.js').LayoutInsertLine | null = null;
   private resizingIds = new Set<ID>();
   private width = 0;
   private height = 0;
@@ -268,6 +272,8 @@ export class Editor implements EditorHost {
       transformHandle: null,
       snapGuides: this.snapGuides,
       dropTargetFrameId: this.dropTargetFrameId,
+      bindingTargetId: this.bindingTargetId,
+      layoutInsertLine: this.layoutInsertLine,
       remotePeers: this.remotePeers,
       currentPageId: this.document.getCurrentPageId(),
       commentPins: this.commentPins,
@@ -325,6 +331,16 @@ export class Editor implements EditorHost {
 
   setDropTargetFrame(frameId: ID | null): void {
     this.dropTargetFrameId = frameId;
+    this.requestRender();
+  }
+
+  setBindingTarget(elementId: ID | null): void {
+    this.bindingTargetId = elementId;
+    this.requestRender();
+  }
+
+  setLayoutInsertLine(line: import('./render/overlay.js').LayoutInsertLine | null): void {
+    this.layoutInsertLine = line;
     this.requestRender();
   }
 
@@ -437,11 +453,25 @@ export class Editor implements EditorHost {
       );
       return;
     }
-    const shadowUpdates: Element[] = [];
     const pageUpdates: Element[] = [];
     for (const el of elements) {
       const shadow = parseShadowId(el.id);
       if (shadow) {
+        const before = this.sceneGraph.getNode(el.id)?.element;
+        if (before) {
+          const blocked = getBlockedOverrideKeys(
+            Object.fromEntries(
+              Object.entries(el).filter(([key, value]) => {
+                const prev = (before as unknown as Record<string, unknown>)[key];
+                return JSON.stringify(prev) !== JSON.stringify(value);
+              }),
+            ),
+          );
+          if (blocked.length > 0) {
+            this.callbacks.onToast?.('实例内该属性不可覆盖，请先 Detach');
+            continue;
+          }
+        }
         const instance = this.document.getElement(shadow.instanceId);
         if (instance?.type === 'instance') {
           const override: Partial<OverridableProps> = {};
@@ -466,12 +496,16 @@ export class Editor implements EditorHost {
     if (pageUpdates.length > 0) {
       this.ctx.runCommand(new UpdateElementsCommand(this.document, pageUpdates));
     }
-    void shadowUpdates;
   }
 
   updateElementProperty(id: ID, patch: Partial<Element>): void {
     const shadow = parseShadowId(id);
     if (shadow) {
+      const blocked = getBlockedOverrideKeys(patch as Record<string, unknown>);
+      if (blocked.length > 0) {
+        this.callbacks.onToast?.('实例内该属性不可覆盖，请先 Detach');
+        return;
+      }
       const override: Partial<OverridableProps> = {};
       if ('text' in patch) override.text = patch.text as string;
       if (patch.fills) override.fills = patch.fills;
@@ -508,11 +542,24 @@ export class Editor implements EditorHost {
 
   createComponent(): void {
     const ids = this.selection.getIds();
-    if (ids.length !== 1) return;
-    const el = this.document.getElement(ids[0]);
-    if (!el || el.type !== 'frame') return;
-    this.ctx.runCommand(new CreateComponentCommand(this.document, el.id));
-    this.selection.select([el.id]);
+    if (ids.length === 0) return;
+    const el = ids.length === 1 ? this.document.getElement(ids[0]) : null;
+    if (el?.type === 'frame') {
+      this.ctx.runCommand(new CreateComponentCommand(this.document, el.id));
+      this.selection.select([el.id]);
+      return;
+    }
+    const cmd = new CreateComponentFromSelectionCommand(this.document, ids);
+    this.ctx.runCommand(cmd);
+    if (cmd.instanceId) this.selection.select([cmd.instanceId]);
+  }
+
+  removeComponent(componentId: ID): void {
+    this.ctx.runCommand(new RemoveComponentCommand(this.document, componentId));
+    if (this.editingComponentId === componentId) {
+      this.exitMasterEdit();
+    }
+    this.callbacks.onDocumentChange?.();
   }
 
   applyAutoLayout(): void {

@@ -1,7 +1,8 @@
 import type { ArrowBinding, ArrowElement, Element, ID, Vec2 } from '@rough/schema';
 import type { SceneGraph } from '../scene/SceneGraph.js';
-import { matApply, matInvert } from '../scene/transforms.js';
+import { matApply, matIdentity, matInvert } from '../scene/transforms.js';
 import { worldToLocal } from '../scene/bounds.js';
+import { buildArrowPoints } from './arrowRouting.js';
 
 const DEFAULT_GAP = 4;
 
@@ -220,27 +221,27 @@ export function updateArrowEndpoints(
     }
   }
 
-  const inv = matInvert(node.worldMatrix);
-  if (!inv) return arrow;
+  const geomWorld = buildArrowPoints(
+    startWorld.x,
+    startWorld.y,
+    endWorld.x,
+    endWorld.y,
+    arrow.routing,
+  );
 
-  const localStart = matApply(inv, startWorld);
-  const localEnd = matApply(inv, endWorld);
+  const parentWorld = node.parent?.worldMatrix ?? matIdentity();
+  const parentInv = matInvert(parentWorld);
+  if (!parentInv) return arrow;
 
-  const minX = Math.min(localStart.x, localEnd.x);
-  const minY = Math.min(localStart.y, localEnd.y);
-  const maxX = Math.max(localStart.x, localEnd.x);
-  const maxY = Math.max(localStart.y, localEnd.y);
+  const localOrigin = matApply(parentInv, { x: geomWorld.x, y: geomWorld.y });
 
   return {
     ...arrow,
-    x: arrow.x + minX,
-    y: arrow.y + minY,
-    width: Math.max(maxX - minX, 1),
-    height: Math.max(maxY - minY, 1),
-    points: [
-      { x: localStart.x - minX, y: localStart.y - minY },
-      { x: localEnd.x - minX, y: localEnd.y - minY },
-    ],
+    x: localOrigin.x,
+    y: localOrigin.y,
+    width: geomWorld.width,
+    height: geomWorld.height,
+    points: geomWorld.points,
   };
 }
 

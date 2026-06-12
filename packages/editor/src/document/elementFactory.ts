@@ -16,6 +16,7 @@ import type {
   Vec2,
 } from '@rough/schema';
 import { DEFAULT_FILL, DEFAULT_STROKE, createId } from '@rough/shared';
+import { buildArrowPoints } from '../interactions/arrowRouting.js';
 
 export interface ElementDefaults {
   roughness: number;
@@ -244,25 +245,20 @@ export function createArrow(
   defaults: ElementDefaults,
   startBinding: ArrowBinding | null = null,
   endBinding: ArrowBinding | null = null,
+  routing: ArrowElement['routing'] = 'orthogonal',
 ): ArrowElement {
-  const minX = Math.min(x1, x2);
-  const minY = Math.min(y1, y2);
-  const maxX = Math.max(x1, x2);
-  const maxY = Math.max(y1, y2);
+  const geom = buildArrowPoints(x1, y1, x2, y2, routing);
   return {
     ...baseProps(defaults),
     type: 'arrow',
     name: '箭头',
-    x: minX,
-    y: minY,
-    width: Math.max(maxX - minX, 1),
-    height: Math.max(maxY - minY, 1),
+    x: geom.x,
+    y: geom.y,
+    width: geom.width,
+    height: geom.height,
     rotation: 0,
-    points: [
-      { x: x1 - minX, y: y1 - minY },
-      { x: x2 - minX, y: y2 - minY },
-    ],
-    routing: 'straight',
+    points: geom.points,
+    routing,
     startBinding,
     endBinding,
     startHead: 'none',

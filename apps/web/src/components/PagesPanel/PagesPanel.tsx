@@ -14,6 +14,8 @@ export function PagesPanel({ editorRef }: PagesPanelProps): JSX.Element {
   const bumpDocumentVersion = useEditorStore((s) => s.bumpDocumentVersion);
   const [editingId, setEditingId] = useState<ID | null>(null);
   const [editName, setEditName] = useState('');
+  const [dragPageId, setDragPageId] = useState<ID | null>(null);
+  const [dropBeforeId, setDropBeforeId] = useState<ID | null>(null);
 
   const editor = editorRef.current;
   const pages = editor?.getPages() ?? [];
@@ -57,6 +59,48 @@ export function PagesPanel({ editorRef }: PagesPanelProps): JSX.Element {
     bumpDocumentVersion();
   };
 
+  const handleDragStart = (pageId: ID, e: React.DragEvent): void => {
+    setDragPageId(pageId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', pageId);
+  };
+
+  const handleDragOver = (pageId: ID, e: React.DragEvent): void => {
+    if (!dragPageId || dragPageId === pageId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const before = e.clientY < rect.top + rect.height / 2;
+    setDropBeforeId(before ? pageId : null);
+  };
+
+  const handleDrop = (pageId: ID, e: React.DragEvent): void => {
+    e.preventDefault();
+    const editorInstance = editorRef.current;
+    if (!editorInstance || !dragPageId || dragPageId === pageId) return;
+
+    const ids = pages.map((p) => p.id);
+    const fromIdx = ids.indexOf(dragPageId);
+    if (fromIdx < 0) return;
+
+    ids.splice(fromIdx, 1);
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const before = e.clientY < rect.top + rect.height / 2;
+    let insertIdx = ids.indexOf(pageId);
+    if (!before) insertIdx += 1;
+    ids.splice(insertIdx, 0, dragPageId);
+
+    editorInstance.reorderPages(ids);
+    bumpDocumentVersion();
+    setDragPageId(null);
+    setDropBeforeId(null);
+  };
+
+  const handleDragEnd = (): void => {
+    setDragPageId(null);
+    setDropBeforeId(null);
+  };
+
   return (
     <div className="panel pages-panel">
       <div className="panel-header">
@@ -69,10 +113,16 @@ export function PagesPanel({ editorRef }: PagesPanelProps): JSX.Element {
         {pages.map((page) => (
           <li
             key={page.id}
-            className={`pages-item ${page.id === currentPageId ? 'active' : ''}`}
+            className={`pages-item ${page.id === currentPageId ? 'active' : ''} ${dragPageId === page.id ? 'dragging' : ''}`}
             onClick={() => handleSwitch(page.id)}
             onDoubleClick={() => startRename(page.id, page.name)}
+            draggable
+            onDragStart={(e) => handleDragStart(page.id, e)}
+            onDragOver={(e) => handleDragOver(page.id, e)}
+            onDrop={(e) => handleDrop(page.id, e)}
+            onDragEnd={handleDragEnd}
           >
+            {dropBeforeId === page.id && <div className="layer-drop-line layer-drop-line-top" />}
             {editingId === page.id ? (
               <input
                 className="layer-rename-input"

@@ -6,6 +6,8 @@ export interface SnapGuide {
   position: number;
   from: number;
   to: number;
+  /** Equal-spacing annotation, e.g. "24" */
+  label?: string;
 }
 
 export interface SnapAdjust {
@@ -171,5 +173,67 @@ export function computeSnapAdjust(
     dy = snappedY - bounds.y;
   }
 
+  const movedBounds = {
+    x: bounds.x + dx,
+    y: bounds.y + dy,
+    width: bounds.width,
+    height: bounds.height,
+  };
+  guides.push(...collectEqualSpacingGuides(movedBounds, siblings, excludeIds));
+
   return { dx, dy, guides };
+}
+
+interface BoundsRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+function collectEqualSpacingGuides(
+  moving: BoundsRect,
+  siblings: Element[],
+  excludeIds: Set<string>,
+): SnapGuide[] {
+  const guides: SnapGuide[] = [];
+  const rowTolerance = Math.max(moving.height * 0.5, 8);
+
+  const rowmates = siblings.filter(
+    (s) =>
+      !excludeIds.has(s.id) &&
+      Math.abs(s.y + s.height / 2 - (moving.y + moving.height / 2)) <= rowTolerance,
+  );
+  if (rowmates.length < 2) return guides;
+
+  const items: BoundsRect[] = [...rowmates, moving].sort((a, b) => a.x - b.x);
+  for (let i = 0; i < items.length - 2; i++) {
+    const a = items[i];
+    const b = items[i + 1];
+    const c = items[i + 2];
+    const gap1 = b.x - (a.x + a.width);
+    const gap2 = c.x - (b.x + b.width);
+    if (gap1 < 0 || gap2 < 0) continue;
+    if (Math.abs(gap1 - gap2) > 1) continue;
+
+    const gap = Math.round((gap1 + gap2) / 2);
+    const midY = (a.y + a.height / 2 + b.y + b.height / 2) / 2;
+    guides.push({
+      orientation: 'horizontal',
+      position: midY,
+      from: a.x + a.width,
+      to: b.x,
+      label: String(gap),
+    });
+    guides.push({
+      orientation: 'horizontal',
+      position: midY,
+      from: b.x + b.width,
+      to: c.x,
+      label: String(gap),
+    });
+    break;
+  }
+
+  return guides;
 }
