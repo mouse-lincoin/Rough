@@ -22,7 +22,7 @@ export class ToolManager {
     this.selectTool = new SelectTool(ctx, host);
     this.tools = new Map<ToolName, Tool>([
       ['select', this.selectTool],
-      ['hand', new HandTool(ctx)],
+      ['hand', new HandTool(ctx, host)],
       ['rectangle', new RectangleTool(ctx)],
       ['ellipse', new EllipseTool(ctx)],
       ['line', new LineTool(ctx)],

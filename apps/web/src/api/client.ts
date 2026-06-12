@@ -100,6 +100,39 @@ export async function deleteCloudDocument(id: string): Promise<void> {
   await request(`/api/v1/documents/${id}`, { method: 'DELETE' });
 }
 
+export async function uploadDocumentThumbnail(documentId: string, dataUrl: string): Promise<void> {
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  const form = new FormData();
+  form.append('file', blob, 'thumbnail.png');
+  const res = await fetch(`${API_BASE}/api/v1/documents/${documentId}/thumbnail`, {
+    method: 'POST',
+    credentials: 'include',
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message ?? `HTTP ${res.status}`);
+  }
+}
+
+export async function getGithubAuthUrl(): Promise<string | null> {
+  try {
+    const data = await request<{ url: string }>('/api/v1/auth/github/url');
+    return data.url;
+  } catch {
+    return null;
+  }
+}
+
+export async function githubCallback(code: string): Promise<ApiUser> {
+  const data = await request<{ user: ApiUser }>('/api/v1/auth/github/callback', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+  return data.user;
+}
+
 export async function createShareLink(
   documentId: string,
   mode: 'view' | 'edit',

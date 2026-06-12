@@ -7,7 +7,10 @@ export class HandTool implements Tool {
   private dragging = false;
   private lastScreen = { x: 0, y: 0 };
 
-  constructor(private ctx: EditorContext) {}
+  constructor(
+    private ctx: EditorContext,
+    private host?: { onUserViewportChange?: () => void },
+  ) {}
 
   onPointerDown(e: NormalizedPointerEvent): void {
     this.dragging = true;
@@ -20,6 +23,7 @@ export class HandTool implements Tool {
     const dy = e.screen.y - this.lastScreen.y;
     this.lastScreen = e.screen;
     this.ctx.viewport.pan(dx, dy);
+    this.host?.onUserViewportChange?.();
     this.ctx.markSceneDirty();
     this.ctx.requestRender();
   }

@@ -56,7 +56,17 @@ export interface EditorCallbacks {
     updates: Array<{ id: ID; elementId: null; worldX: number; worldY: number }>,
   ) => void;
   onToast?: (message: string) => void;
+  onCollabStatusChange?: (status: CollabConnectionStatus) => void;
+  onRemotePeersChange?: (peers: import('./collab/AwarenessSync.js').RemotePeer[]) => void;
+  onSpotlightFollowChange?: (clientId: number | null) => void;
 }
+
+export type CollabConnectionStatus =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'disconnected'
+  | 'failed';
 
 export interface ExportContext {
   pageId: ID;

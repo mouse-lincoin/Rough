@@ -22,6 +22,18 @@ services:
     volumes:
       - rough-minio:/data
 
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3000
+        VITE_COLLAB_URL: ws://localhost:3001
+    ports:
+      - '4173:4173'
+    depends_on:
+      - server
+
   server:
     build:
       context: .

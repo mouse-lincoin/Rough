@@ -28,6 +28,7 @@ export interface OverlayState {
   bindingTargetId: ID | null;
   layoutInsertLine: LayoutInsertLine | null;
   remotePeers: RemotePeer[];
+  remoteCursor?: (clientId: number) => Vec2 | null;
   currentPageId: ID;
   commentPins: CommentPin[];
   highlightedCommentId: ID | null;
@@ -69,7 +70,7 @@ export class OverlayRenderer {
 
     for (const peer of state.remotePeers) {
       if (peer.state.pageId !== state.currentPageId) continue;
-      this.drawRemotePeer(ctx, sceneGraph, viewport, peer);
+      this.drawRemotePeer(ctx, sceneGraph, viewport, peer, state);
     }
 
     for (const pin of state.commentPins) {
@@ -131,6 +132,7 @@ export class OverlayRenderer {
     sceneGraph: SceneGraph,
     viewport: Viewport,
     peer: RemotePeer,
+    state: OverlayState,
   ): void {
     const color = peer.state.user?.color ?? '#6965DB';
     const name = peer.state.user?.name ?? 'User';
@@ -152,8 +154,9 @@ export class OverlayRenderer {
       ctx.restore();
     }
 
-    if (peer.state.cursor) {
-      const p = viewport.worldToScreen(peer.state.cursor);
+    const cursorWorld = state.remoteCursor?.(peer.clientId) ?? peer.state.cursor;
+    if (cursorWorld) {
+      const p = viewport.worldToScreen(cursorWorld);
       ctx.save();
       ctx.strokeStyle = color;
       ctx.fillStyle = color;

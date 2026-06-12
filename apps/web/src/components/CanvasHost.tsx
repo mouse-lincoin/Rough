@@ -10,6 +10,7 @@ import { attachE2EBridge } from '../e2eBridge';
 interface CanvasHostProps {
   docId: string;
   docName: string;
+  cloudDocumentId?: string | null;
   editorRef: React.MutableRefObject<Editor | null>;
   onExportRequest?: () => void;
   onShortcutsRequest?: () => void;
@@ -27,6 +28,7 @@ interface CanvasHostProps {
 export function CanvasHost({
   docId,
   docName,
+  cloudDocumentId = null,
   editorRef,
   onExportRequest,
   onShortcutsRequest,
@@ -44,6 +46,8 @@ export function CanvasHost({
   const setCurrentPageId = useEditorStore((s) => s.setCurrentPageId);
   const setPanelsVisible = useEditorStore((s) => s.setPanelsVisible);
   const showToast = useEditorStore((s) => s.showToast);
+  const setRemotePeers = useEditorStore((s) => s.setRemotePeers);
+  const setFollowingClientId = useEditorStore((s) => s.setFollowingClientId);
 
   const hostCallbacksRef = useRef<EditorCallbacks & { onEditorReady?: () => void }>({});
   hostCallbacksRef.current = {
@@ -91,6 +95,16 @@ export function CanvasHost({
           onCommentPinClick: (id, screen) =>
             hostCallbacksRef.current.onCommentPinClick?.(id, screen),
           onToast: (message) => showToast(message),
+          onRemotePeersChange: setRemotePeers,
+          onSpotlightFollowChange: setFollowingClientId,
+          onThumbnailUpdated: () => {
+            if (!cloudDocumentId) return;
+            void import('../api/client').then(async ({ uploadDocumentThumbnail }) => {
+              const { getDocumentThumbnail } = await import('@rough/document');
+              const dataUrl = await getDocumentThumbnail(docId);
+              if (dataUrl) await uploadDocumentThumbnail(cloudDocumentId, dataUrl);
+            });
+          },
         },
       });
 

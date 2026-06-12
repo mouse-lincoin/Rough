@@ -98,6 +98,31 @@ export async function registerDocumentRoutes(
     return { ok: true };
   });
 
+  app.post<{ Params: { id: string } }>('/api/v1/documents/:id/thumbnail', async (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return;
+
+    const access = await resolveDocumentAccess(db, request.params.id, user);
+    if (!access || !canWrite(access.mode)) {
+      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'No write access' } });
+    }
+
+    const file = await request.file();
+    if (!file) {
+      return reply.status(400).send({ error: { code: 'INVALID', message: 'File required' } });
+    }
+
+    const buffer = await file.toBuffer();
+    const key = `thumbnails/${request.params.id}.png`;
+    await storage.put(key, buffer, 'image/png');
+    await db
+      .update(documents)
+      .set({ thumbnailKey: key, updatedAt: new Date() })
+      .where(eq(documents.id, request.params.id));
+
+    return { ok: true, thumbnailKey: key };
+  });
+
   app.get<{ Params: { id: string } }>('/api/v1/documents/:id/snapshot', async (request, reply) => {
     const token = (request.query as { token?: string }).token;
     const access = await resolveDocumentAccess(db, request.params.id, request.user, token);

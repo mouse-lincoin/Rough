@@ -24,6 +24,7 @@ import { CommentsProvider, useComments } from '../components/CommentsPanel/comme
 import { CommentsLayer } from '../components/CommentsPanel/CommentsLayer';
 import { CommentThreadPopover } from '../components/CommentsPanel/CommentThreadPopover';
 import { ShortcutsHelp } from '../components/ShortcutsHelp/ShortcutsHelp';
+import { CollabPeersBar } from '../components/CollabPeersBar/CollabPeersBar';
 import { useEditorCollab } from '../hooks/useEditorCollab';
 import { getCloudDocumentId } from '../services/cloudSync';
 import { useAuthStore } from '../stores/authStore';
@@ -224,6 +225,27 @@ function EditorPageContent({
 }: EditorPageContentProps): JSX.Element {
   const { setPendingAnchor, openThread } = useComments();
   const toastMessage = useEditorStore((s) => s.toastMessage);
+  const collabStatus = useEditorStore((s) => s.collabStatus);
+
+  const collabLabel =
+    !cloudDocumentId || !user
+      ? null
+      : collabStatus === 'connecting'
+        ? '连接中…'
+        : collabStatus === 'connected'
+          ? '协作中'
+          : collabStatus === 'failed'
+            ? '协作离线'
+            : collabStatus === 'disconnected'
+              ? '已断开'
+              : '协作';
+
+  const collabClass =
+    collabStatus === 'connected'
+      ? 'collab-status-connected'
+      : collabStatus === 'failed' || collabStatus === 'disconnected'
+        ? 'collab-status-offline'
+        : 'collab-status-pending';
 
   return (
     <div className="app" onPaste={onPaste}>
@@ -238,11 +260,12 @@ function EditorPageContent({
           onChange={(e) => onDocNameChange(e.target.value)}
           onBlur={onDocNameBlur}
         />
-        {cloudDocumentId && user && (
-          <span className="auth-status collab-status" title="已连接云端协作">
-            协作
+        {collabLabel && (
+          <span className={`auth-status collab-status ${collabClass}`} title="协作连接状态">
+            {collabLabel}
           </span>
         )}
+        <CollabPeersBar editorRef={editorRef} />
         <Toolbar editorRef={editorRef} />
         <button
           type="button"
@@ -267,6 +290,7 @@ function EditorPageContent({
           <CanvasHost
             docId={docId}
             docName={docName}
+            cloudDocumentId={cloudDocumentId}
             editorRef={editorRef}
             onExportRequest={onExportOpen}
             onCommentPlace={setPendingAnchor}

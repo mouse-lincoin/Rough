@@ -7,6 +7,8 @@ import { verifyToken } from '../auth/jwt.js';
 import { resolveDocumentAccess, canWrite } from '../services/access.js';
 
 const snapshotTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const snapshotVersions = new Map<string, number>();
+const HISTORY_INTERVAL = 50;
 
 export function createCollabServer(
   config: ServerConfig,
@@ -49,6 +51,14 @@ export function createCollabServer(
           void (async () => {
             const update = Y.encodeStateAsUpdate(document);
             await storage.put(key, Buffer.from(update), 'application/octet-stream');
+
+            const version = (snapshotVersions.get(documentName) ?? 0) + 1;
+            snapshotVersions.set(documentName, version);
+            if (version % HISTORY_INTERVAL === 0) {
+              const historyKey = `snapshots/${documentName}/v${version}.bin`;
+              await storage.put(historyKey, Buffer.from(update), 'application/octet-stream');
+            }
+
             snapshotTimers.delete(documentName);
           })();
         }, 2000),

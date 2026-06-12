@@ -15,6 +15,7 @@ export interface EditorHost {
   getResizingIds(): Set<ID>;
   setResizingIds(ids: Set<ID>): void;
   startTextEditing?(element: TextElement): void;
+  onUserViewportChange?(): void;
 }
 
 export class EditorContext {

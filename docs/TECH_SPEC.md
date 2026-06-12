@@ -947,7 +947,7 @@ WS     /collab/:documentId?token=   # Hocuspocus
 | Auto Layout §8.6 | ✅ 达标(justifyContent/hug/布局内重排/sizing UI) |
 | 组件系统 §8.7、线框组件库 §8.8 | ✅ 达标(创建自动包 Frame;删主组件自动 Detach) |
 | 导出 §8.11 | ✅ 五格式齐全(SVG 含 path/polygon/arrow) |
-| 协作 §9 | ✅ 主编辑器已接入(光标插值/跟随模式未做) |
+| 协作 §9 | ✅ 达标(重试/状态/头像/跟随/光标插值) |
 | 后端 §10 | ✅ REST/DB/S3 齐全(前端走 DEV_AUTH 开发登录) |
 | 评论 §8.10 | ✅ 锚点/浮层/跳转已接通(删除元素退化已修;遗留孤儿 elementId 仍可能跳位) |
 
@@ -970,12 +970,12 @@ WS     /collab/:documentId?token=   # Hocuspocus
 | ~~11~~ | ~~P1~~ | 组件 | ~~Detach/包 Frame/override 提示~~ ✅ 已修 | §8.7 | `componentCommands.ts`, `Editor.ts` |
 | ~~12~~ | ~~P1~~ | 页面/组件库 | ~~页面拖拽排序;组件拖放到画布~~ ✅ 已修 | §8.3/§8.8 | `PagesPanel.tsx`, `ComponentsPanel.tsx`, `CanvasHost.tsx` |
 | ~~13~~ | ~~P1~~ | 导出 | ~~SVG path/polygon/arrow~~ ✅ 已修 | §8.11 | `export/svg.ts` |
-| 14 | P2 | 协作 | 连接失败无重试;徽章不反映 WS 状态;无头像列表/跟随;光标无插值 | §9.2 | `useEditorCollab.ts`, `overlay.ts` |
-| 15 | P2 | 云同步 | 登录迁移非原子;失败无逐文档容错;缩略图未上传云端 | §11 | `cloudSync.ts`, `thumbnailStore.ts` |
-| 16 | P2 | 后端 | GitHub OAuth 回调页未做;快照无 50 版历史;compose 缺 web;WS 独立端口 | §9.1/§10 | `apps/server/`, `docker-compose.yml` |
-| 17 | P2 | 测试 | E2E 经 `__ROUGH_E2E__` 桥,未覆盖真实键鼠;无性能回归自动化 | §12/§13 | `e2eBridge.ts`, `e2e/tests/` |
+| ~~14~~ | ~~P2~~ | 协作 | ~~重试/状态/头像/跟随/插值~~ ✅ 已修 | §9.2 | `useEditorCollab.ts`, `CollabPeersBar.tsx` |
+| ~~15~~ | ~~P2~~ | 云同步 | ~~原子迁移/容错/缩略图上传~~ ✅ 已修 | §11 | `cloudSync.ts`, `documents.ts` |
+| ~~16~~ | ~~P2~~ | 后端 | ~~OAuth 回调/50 版快照/compose web~~ ✅ 已修(WS 仍独立端口) | §9.1/§10 | `AuthCallbackPage.tsx`, `hocuspocus.ts` |
+| ~~17~~ | ~~P2~~ | 测试 | ~~真实键鼠 E2E/性能回归~~ ✅ 已修 | §12/§13 | `e2e/tests/real-input.spec.ts` |
 
-**建议迭代顺序**:~~P0 #1–#4~~ ✅ → ~~P1 #5–#13~~ ✅ → **P2 #14–#17**(协作/工程)。
+**建议迭代顺序**:~~P0 #1–#4~~ ✅ → ~~P1 #5–#13~~ ✅ → ~~P2 #14–#17~~ ✅。
 
 #### 正确性问题(P0)
 
@@ -998,10 +998,10 @@ WS     /collab/:documentId?token=   # Hocuspocus
 
 #### 工程与体验(P2)
 
-14. 协作:连接失败静默无重试;顶栏「协作」徽章不反映真实 WS 状态;无协作者头像列表与跟随(spotlight)模式;光标无线性插值(§9.2)。
-15. 云同步:登录迁移非原子(可能产生孤儿云文档);失败无逐文档容错;缩略图未上传云端(§11)。
-16. 后端:GitHub OAuth 前端回调页未做(开发用 DEV_AUTH);快照无「每 50 版本」历史;docker-compose 缺 web 服务;协作 WS 为独立端口而非 `/collab/:documentId` 路径(§9.1/§10)。
-17. E2E 测试经 `__ROUGH_E2E__` 桥直调内核命令,未覆盖真实鼠标键盘路径;无自动化性能回归测试(§12/§13)。
+14. ~~协作~~ ✅ **已修(v1.2.0)**:指数退避重试;徽章反映 WS 状态;协作者头像条+跟随视口;光标线性插值。
+15. ~~云同步~~ ✅ **已修(v1.2.0)**:迁移失败回滚云文档;逐文档容错;缩略图上传 API+客户端。
+16. ~~后端~~ ✅ **已修(v1.2.0)**:GitHub OAuth 回调页;每 50 版历史快照;docker-compose 增加 web(WS 独立端口为已知偏离)。
+17. ~~E2E/性能~~ ✅ **已修(v1.2.0)**:真实键鼠矩形绘制用例;1000 元素性能回归 spec。
 
 ### B.3 与规格的已声明偏离(可接受)
 
