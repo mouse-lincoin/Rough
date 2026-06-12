@@ -33,6 +33,7 @@ import {
 } from './comments/commentAnchors.js';
 import { renderRootsToPngBlobs } from './export/offscreenRender.js';
 import { AwarenessSync, type RemotePeer } from './collab/AwarenessSync.js';
+import { PeerCursorInterpolator } from './collab/peerCursorInterpolation.js';
 import type { CollabOptions } from '@rough/document';
 import type { SnapGuide } from './interactions/snapping.js';
 import { findDeepestContainerAtPoint, hitTestPoint } from './interactions/hitTest.js';
@@ -113,6 +114,8 @@ export class Editor implements EditorHost {
   private editingComponentId: ID | null = null;
   private awareness: AwarenessSync | null = null;
   private remotePeers: RemotePeer[] = [];
+  private peerCursors = new PeerCursorInterpolator();
+  private followingClientId: number | null = null;
   private thumbnailTimer: ReturnType<typeof setTimeout> | null = null;
   private commentPins: CommentPin[] = [];
   private highlightedCommentId: ID | null = null;
@@ -265,6 +268,9 @@ export class Editor implements EditorHost {
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+    this.peerCursors.tick();
+    this.syncFollowingViewport();
+
     const selectTool = this.tools.selectTool;
     this.overlayRenderer.render(ctx, this.sceneGraph, this.viewport, {
       selectedIds: this.selection.selectedIds,
@@ -275,6 +281,7 @@ export class Editor implements EditorHost {
       bindingTargetId: this.bindingTargetId,
       layoutInsertLine: this.layoutInsertLine,
       remotePeers: this.remotePeers,
+      remoteCursor: (clientId) => this.peerCursors.getCursor(clientId),
       currentPageId: this.document.getCurrentPageId(),
       commentPins: this.commentPins,
       highlightedCommentId: this.highlightedCommentId,
@@ -759,13 +766,29 @@ export class Editor implements EditorHost {
   }
 
   connectCollab(options: CollabOptions & { user: { id: string; name: string } }): void {
-    this.document.connectCollab(options);
+    const onStatus = options.onStatus;
+    this.document.connectCollab({
+      ...options,
+      onStatus: (status) => {
+        onStatus?.(status);
+        const mapped =
+          status === 'connected'
+            ? 'connected'
+            : status === 'connecting'
+              ? 'connecting'
+              : 'disconnected';
+        this.callbacks.onCollabStatusChange?.(mapped);
+      },
+    });
+    this.callbacks.onCollabStatusChange?.('connecting');
     this.awareness?.destroy();
     this.awareness = new AwarenessSync(this.document, this.viewport, options.user);
     this.awareness.start(
       () => this.document.getCurrentPageId(),
       (peers) => {
         this.remotePeers = peers;
+        this.peerCursors.updatePeers(peers);
+        this.callbacks.onRemotePeersChange?.(peers);
         this.requestRender();
       },
     );
@@ -778,8 +801,60 @@ export class Editor implements EditorHost {
     this.awareness?.destroy();
     this.awareness = null;
     this.remotePeers = [];
+    this.peerCursors.clear();
+    this.followingClientId = null;
     this.document.disconnectCollab();
+    this.callbacks.onCollabStatusChange?.('idle');
+    this.callbacks.onRemotePeersChange?.([]);
     this.requestRender();
+  }
+
+  getRemotePeers(): RemotePeer[] {
+    return this.remotePeers;
+  }
+
+  getFollowingClientId(): number | null {
+    return this.followingClientId;
+  }
+
+  followRemotePeer(clientId: number): void {
+    const peer = this.remotePeers.find((p) => p.clientId === clientId);
+    if (!peer) return;
+    this.followingClientId = clientId;
+    this.callbacks.onSpotlightFollowChange?.(clientId);
+    this.applyPeerViewport(peer);
+  }
+
+  clearSpotlightFollow(): void {
+    if (this.followingClientId === null) return;
+    this.followingClientId = null;
+    this.callbacks.onSpotlightFollowChange?.(null);
+  }
+
+  onUserViewportChange(): void {
+    this.clearSpotlightFollow();
+  }
+
+  private syncFollowingViewport(): void {
+    if (this.followingClientId === null) return;
+    const peer = this.remotePeers.find((p) => p.clientId === this.followingClientId);
+    if (!peer) {
+      this.followingClientId = null;
+      return;
+    }
+    this.applyPeerViewport(peer);
+  }
+
+  private applyPeerViewport(peer: RemotePeer): void {
+    const vp = peer.state.viewport;
+    if (!vp) return;
+    if (peer.state.pageId && peer.state.pageId !== this.document.getCurrentPageId()) {
+      this.switchPage(peer.state.pageId);
+    }
+    this.viewport.offset = { ...vp.offset };
+    this.viewport.zoom = vp.zoom;
+    this.markSceneDirty();
+    this.viewportDirty = true;
   }
 
   broadcastCommentChange(type: 'created' | 'updated'): void {

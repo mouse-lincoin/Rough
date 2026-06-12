@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { getGithubAuthUrl } from '../../api/client';
 import { useAuthStore } from '../../stores/authStore';
 
 export function AuthButton(): JSX.Element {
@@ -8,10 +9,15 @@ export function AuthButton(): JSX.Element {
   const init = useAuthStore((s) => s.init);
   const login = useAuthStore((s) => s.login);
   const signOut = useAuthStore((s) => s.signOut);
+  const [githubUrl, setGithubUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!initialized) void init();
   }, [initialized, init]);
+
+  useEffect(() => {
+    void getGithubAuthUrl().then(setGithubUrl);
+  }, []);
 
   if (loading) return <span className="auth-status">…</span>;
 
@@ -27,8 +33,21 @@ export function AuthButton(): JSX.Element {
   }
 
   return (
-    <button type="button" className="toolbar-btn" onClick={() => void login()}>
-      登录同步
-    </button>
+    <div className="auth-actions">
+      {githubUrl && (
+        <button
+          type="button"
+          className="toolbar-btn"
+          onClick={() => {
+            window.location.href = githubUrl;
+          }}
+        >
+          GitHub 登录
+        </button>
+      )}
+      <button type="button" className="toolbar-btn" onClick={() => void login()}>
+        开发登录
+      </button>
+    </div>
   );
 }

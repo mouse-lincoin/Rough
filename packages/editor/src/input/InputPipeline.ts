@@ -118,11 +118,13 @@ export class InputPipeline {
     if (e.ctrlKey || e.metaKey) {
       const factor = e.deltaY < 0 ? 1.1 : 0.9;
       this.ctx.viewport.zoomAt(screen, factor);
+      this.editor.onUserViewportChange();
     } else {
       const dx = e.shiftKey ? e.deltaY : e.deltaX;
       const dy = e.shiftKey ? 0 : e.deltaY;
       this.ctx.viewport.pan(-dx, -dy);
     }
+    this.editor.onUserViewportChange();
     this.ctx.markSceneDirty();
     this.ctx.requestRender();
   };

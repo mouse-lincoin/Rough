@@ -1,6 +1,13 @@
 export { Editor } from './Editor.js';
 export type { EditorOptions } from './Editor.js';
-export type { ToolName, EditorCallbacks, ExportContext, CommentPin } from './types.js';
+export type {
+  ToolName,
+  EditorCallbacks,
+  ExportContext,
+  CommentPin,
+  CollabConnectionStatus,
+} from './types.js';
+export type { RemotePeer } from './collab/AwarenessSync.js';
 export {
   computeAnchorDegradations,
   resolveCommentAnchorWorld,
